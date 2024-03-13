@@ -25,6 +25,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "react-native-background-geolocation",
+      "react-native-background-fetch",
+      "expo-gradle-ext-vars"
+    ]
   }
 }
