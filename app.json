@@ -15,21 +15,57 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "[Zerel Parksharing] This app requires location in the background",
+        "NSLocationWhenInUseUsageDescription": "[Zerel Parksharing] This app requires location while in use",
+        "NSMotionUsageDescription": "[Zerel Parksharing] This app uses motion-detection to determine the motion-activity of the device (walking, vehicle, bicycle, etc)",
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "processing",
+          "audio"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.transistorsoft.fetch",
+          "com.transistorsoft.customtask"
+        ]
+      },
+      "bundleIdentifier": "com.fzf.Haps"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.fzf.Haps"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "react-native-background-geolocation",
+        {
+          "license": "YOUR_LICENSE_KEY_HERE"
+        }
+      ],
+      [
+        "expo-gradle-ext-vars",
+        {
+          "googlePlayServicesLocationVersion": "21.1.0",
+          "appCompatVersion": "1.4.2"
+        }
+      ],
+      "react-native-background-fetch",
       "react-native-background-geolocation",
       "react-native-background-fetch",
       "expo-gradle-ext-vars"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b1a35c73-5d54-4920-8ecf-c1895c01a3c1"
+      }
+    }
   }
 }
