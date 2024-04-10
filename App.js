@@ -5,10 +5,7 @@ import {
   Text,
 } from 'react-native';
 
-import BackgroundGeolocation, {
-  Location,
-  Subscription
-} from "react-native-background-geolocation";
+import BackgroundGeolocation from "react-native-background-geolocation";
 
 export default function App() {
   const [enabled, setEnabled] = React.useState(false);
@@ -45,12 +42,11 @@ export default function App() {
       logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
       stopOnTerminate: false,   // <-- Allow the background-service to continue tracking when user closes the app.
       startOnBoot: true,        // <-- Auto start tracking when device is powered-up.
+      heartbeatInterval: 600,
+      preventSuspend: true,
       // HTTP / SQLite config
       url: 'https://haps.app/users/locations',
       batchSync: true,       // <-- [Default: false] Set true to sync locations to server in a single HTTP request.
-      headers: {              // <-- Optional HTTP headers
-        "bypass-tunnel-reminder": "bar"
-      },
     }).then((state) => {
       setEnabled(state.enabled)
       console.log("- BackgroundGeolocation is configured and ready: ", state.enabled);
