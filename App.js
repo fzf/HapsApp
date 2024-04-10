@@ -3,11 +3,19 @@ import {
   SafeAreaView,
   Switch,
   Text,
+  Button,
 } from 'react-native';
+
+import * as Sentry from '@sentry/react-native';
 
 import BackgroundGeolocation from "react-native-background-geolocation";
 
-export default function App() {
+Sentry.init({
+  dsn: "https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504",
+  debug: true
+})
+
+function App() {
   const [enabled, setEnabled] = React.useState(false);
   const [location, setLocation] = React.useState('');
 
@@ -81,3 +89,5 @@ export default function App() {
     </SafeAreaView>
   )
 }
+
+export default Sentry.wrap(App)

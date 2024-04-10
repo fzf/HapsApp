@@ -45,6 +45,13 @@
     },
     "plugins": [
       [
+        "@sentry/react-native/expo",
+        {
+          "organization": "haps",
+          "project": "mobile"
+        }
+      ],
+      [
         "react-native-background-geolocation",
         {
           "license": "YOUR_LICENSE_KEY_HERE"
