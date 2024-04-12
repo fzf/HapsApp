@@ -3,8 +3,8 @@ import {
   SafeAreaView,
   Switch,
   Text,
-  Button,
 } from 'react-native';
+import * as Device from 'expo-device';
 
 import * as Sentry from '@sentry/react-native';
 
@@ -12,7 +12,6 @@ import BackgroundGeolocation from "react-native-background-geolocation";
 
 Sentry.init({
   dsn: "https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504",
-  debug: true
 })
 
 function App() {
@@ -38,6 +37,14 @@ function App() {
       console.log('[onProviderChange]', event);
     })
 
+    let backendUrl = process.env.EXPO_PUBLIC_API_URL
+    let debug = false
+
+    if (!Device.isDevice) {
+      backendUrl = 'http://localhost:3000'
+      debug = true
+    }
+
     /// 2. ready the plugin.
     BackgroundGeolocation.ready({
       // Geolocation Config
@@ -46,14 +53,14 @@ function App() {
       // Activity Recognition
       stopTimeout: 5,
       // Application config
-      debug: false, // <-- enable this hear sounds for background-geolocation life-cycle.
+      debug: true, // <-- enable this hear sounds for background-geolocation life-cycle.
       logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
       stopOnTerminate: false,   // <-- Allow the background-service to continue tracking when user closes the app.
       startOnBoot: true,        // <-- Auto start tracking when device is powered-up.
       heartbeatInterval: 600,
       preventSuspend: true,
       // HTTP / SQLite config
-      url: 'https://haps.app/users/locations',
+      url: backendUrl + '/users/locations',
       batchSync: true,       // <-- [Default: false] Set true to sync locations to server in a single HTTP request.
     }).then((state) => {
       setEnabled(state.enabled)
