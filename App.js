@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   SafeAreaView,
-  Switch,
   Text,
 } from 'react-native';
 import * as Device from 'expo-device';
@@ -15,7 +14,6 @@ Sentry.init({
 })
 
 function App() {
-  const [enabled, setEnabled] = React.useState(false);
   const [location, setLocation] = React.useState('');
 
   React.useEffect(() => {
@@ -53,7 +51,7 @@ function App() {
       // Activity Recognition
       stopTimeout: 5,
       // Application config
-      debug: true, // <-- enable this hear sounds for background-geolocation life-cycle.
+      debug: debug, // <-- enable this hear sounds for background-geolocation life-cycle.
       logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
       stopOnTerminate: false,   // <-- Allow the background-service to continue tracking when user closes the app.
       startOnBoot: true,        // <-- Auto start tracking when device is powered-up.
@@ -63,7 +61,7 @@ function App() {
       url: backendUrl + '/users/locations',
       batchSync: true,       // <-- [Default: false] Set true to sync locations to server in a single HTTP request.
     }).then((state) => {
-      setEnabled(state.enabled)
+      BackgroundGeolocation.start();
       console.log("- BackgroundGeolocation is configured and ready: ", state.enabled);
     });
 
@@ -78,20 +76,10 @@ function App() {
     }
   }, []);
 
-  /// 3. start / stop BackgroundGeolocation
-  React.useEffect(() => {
-    if (enabled) {
-      BackgroundGeolocation.start();
-    } else {
-      BackgroundGeolocation.stop();
-      setLocation('');
-    }
-  }, [enabled]);
 
   return (
     <SafeAreaView style={{alignItems:'center'}}>
       <Text>Click to enable BackgroundGeolocation</Text>
-      <Switch value={enabled} onValueChange={setEnabled} />
       <Text style={{fontFamily:'monospace', fontSize:12}}>{location}</Text>
     </SafeAreaView>
   )
