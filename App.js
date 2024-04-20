@@ -78,7 +78,7 @@ function App() {
 
 
   return (
-    <SafeAreaView style={{alignItems:'center'}}>
+    <SafeAreaView className="flex-1 items-center justify-center bg-blue">
       <Text>Click to enable BackgroundGeolocation</Text>
       <Text style={{fontFamily:'monospace', fontSize:12}}>{location}</Text>
     </SafeAreaView>
