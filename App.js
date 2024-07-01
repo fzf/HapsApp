@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Text, View, Button, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+
+import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 
 Notifications.setNotificationHandler({
@@ -59,6 +62,56 @@ async function registerForPushNotificationsAsync() {
   }
 }
 
+const LOCATION_TASK_NAME = 'background-location-task';
+
+async function requestLocationPermissions() {
+  const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+  if (foregroundStatus === 'granted') {
+    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+    if (backgroundStatus === 'granted') {
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        deferredUpdatesInterval: 300000,
+        pausesUpdatesAutomatically: true
+      });
+    }
+  }
+};
+
+TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
+  if (error) {
+    // Error occurred - check `error.message` for more details.
+    return;
+  }
+  if (data) {
+    const { locations } = data;
+    console.log(process.env.EXPO_PUBLIC_API_URL)
+
+    fetch(
+      process.env.EXPO_PUBLIC_API_URL + '/users/locations',
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(
+          {
+            locations: locations
+          }
+        )
+      }
+    ).then(
+      res => {
+        console.log(res.json())
+      }
+    ).catch(
+      error => {
+        console.log(error)
+      }
+    )
+  }
+});
+
 export default function App() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [notification, setNotification] = useState(undefined);
@@ -87,6 +140,10 @@ export default function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    requestLocationPermissions()
+  }, [])
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'space-around' }}>
