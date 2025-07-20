@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@sentry/react-native": "^6.17.0",
     "expo": "^53.0.19",
     "expo-background-task": "^0.2.8",
     "expo-constants": "~17.1.7",
@@ -19,6 +20,7 @@
     "expo-status-bar": "~2.2.3",
     "expo-task-manager": "~13.1.6",
     "expo-updates": "~0.28.17",
+    "promise": "^8.3.0",
     "react": "19.0.0",
     "react-native": "0.79.5"
   },
