@@ -14,6 +14,9 @@
     "ios": {
       "buildNumber": "2",
       "supportsTablet": false,
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location in the background",
         "UIBackgroundModes": [
