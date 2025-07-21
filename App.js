@@ -81,6 +81,42 @@ async function registerForPushNotificationsAsync() {
 
 const LOCATION_TASK_NAME = 'background-location-task';
 
+// Helper functions for location analysis
+function calculateTotalDistance(locations) {
+  if (locations.length < 2) return 0;
+
+  let totalDistance = 0;
+  for (let i = 1; i < locations.length; i++) {
+    const prev = locations[i - 1];
+    const curr = locations[i];
+    if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
+      totalDistance += calculateDistanceBetween(prev, curr);
+    }
+  }
+  return Math.round(totalDistance);
+}
+
+function calculateDistanceBetween(loc1, loc2) {
+  const R = 6371000; // Earth's radius in meters
+  const lat1Rad = loc1.latitude * Math.PI / 180;
+  const lat2Rad = loc2.latitude * Math.PI / 180;
+  const deltaLat = (loc2.latitude - loc1.latitude) * Math.PI / 180;
+  const deltaLng = (loc2.longitude - loc1.longitude) * Math.PI / 180;
+
+  const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
+            Math.cos(lat1Rad) * Math.cos(lat2Rad) *
+            Math.sin(deltaLng/2) * Math.sin(deltaLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c;
+}
+
+function calculateAverageAccuracy(locations) {
+  const accuracies = locations.filter(l => l.accuracy).map(l => l.accuracy);
+  return accuracies.length > 0 ?
+    Math.round(accuracies.reduce((sum, acc) => sum + acc, 0) / accuracies.length) : null;
+}
+
 async function requestLocationPermissions() {
   const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
   if (foregroundStatus === 'granted') {
@@ -96,12 +132,50 @@ async function requestLocationPermissions() {
 
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
-    // Error occurred - check `error.message` for more details.
+    // Log error to Sentry
+    Sentry.captureException(error, {
+      tags: {
+        section: 'background_location_task'
+      },
+      extra: {
+        task_name: LOCATION_TASK_NAME,
+        error_message: error.message
+      }
+    });
+    console.error('Background location task error:', error);
     return;
   }
+
   if (data) {
     const { locations } = data;
-    console.log(process.env.EXPO_PUBLIC_API_URL)
+
+    // Log successful location collection to Sentry with detailed location data
+    const locationDetails = locations.map(loc => ({
+      latitude: loc.coords?.latitude,
+      longitude: loc.coords?.longitude,
+      accuracy: loc.coords?.accuracy,
+      altitude: loc.coords?.altitude,
+      heading: loc.coords?.heading,
+      speed: loc.coords?.speed,
+      timestamp: new Date(loc.timestamp).toISOString()
+    }));
+
+    Sentry.addBreadcrumb({
+      message: `Background location task collected ${locations.length} locations`,
+      level: 'info',
+      data: {
+        location_count: locations.length,
+        api_url: process.env.EXPO_PUBLIC_API_URL,
+        first_location: locationDetails[0],
+        last_location: locationDetails[locationDetails.length - 1],
+        all_locations: locationDetails,
+        time_span_minutes: locations.length > 1 ?
+          (locations[locations.length - 1].timestamp - locations[0].timestamp) / (1000 * 60) : 0
+      }
+    });
+
+    console.log('API URL:', process.env.EXPO_PUBLIC_API_URL);
+    console.log('Locations collected:', locations.length);
 
     fetch(
       process.env.EXPO_PUBLIC_API_URL + '/users/locations',
@@ -111,21 +185,54 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(
-          {
-            locations: locations
+        body: JSON.stringify({
+          locations: locations
+        })
+      }
+    ).then(async (res) => {
+      if (res.ok) {
+        const responseData = await res.json();
+        // Log successful API call to Sentry with full location details
+        Sentry.captureMessage('Location data sent successfully', {
+          level: 'info',
+          tags: {
+            section: 'background_location_task',
+            api_status: 'success'
+          },
+          extra: {
+            locations_sent: locations.length,
+            response_status: res.status,
+            response_data: responseData,
+            location_details: locationDetails,
+            distance_traveled_meters: calculateTotalDistance(locationDetails),
+            average_accuracy: calculateAverageAccuracy(locationDetails),
+            max_speed: Math.max(...locationDetails.map(l => l.speed || 0))
           }
-        )
+        });
+        console.log('Location data sent successfully:', responseData);
+      } else {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
-    ).then(
-      res => {
-        console.log(res.json())
-      }
-    ).catch(
-      error => {
-        console.log(error)
-      }
-    )
+    }).catch((error) => {
+      // Log API errors to Sentry with location context
+      Sentry.captureException(error, {
+        tags: {
+          section: 'background_location_task',
+          api_status: 'error'
+        },
+        extra: {
+          api_url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
+          locations_attempted: locations.length,
+          error_message: error.message,
+          failed_location_data: locationDetails,
+          first_location_coords: locationDetails[0] ?
+            `${locationDetails[0].latitude}, ${locationDetails[0].longitude}` : null,
+          last_location_coords: locationDetails[locationDetails.length - 1] ?
+            `${locationDetails[locationDetails.length - 1].latitude}, ${locationDetails[locationDetails.length - 1].longitude}` : null
+        }
+      });
+      console.error('Failed to send location data:', error);
+    });
   }
 });
 
@@ -160,6 +267,20 @@ export default Sentry.wrap(function App() {
 
   useEffect(() => {
     requestLocationPermissions()
+
+    // Set user context for Sentry with location tracking info
+    Sentry.setUser({
+      id: "1", // Your hardcoded user ID
+      username: "location_tracker_user"
+    });
+
+    // Add app context
+    Sentry.setTag("app_section", "location_tracking");
+    Sentry.setContext("app_info", {
+      location_permissions_requested: true,
+      background_task: LOCATION_TASK_NAME,
+      api_endpoint: process.env.EXPO_PUBLIC_API_URL + '/users/locations'
+    });
   }, [])
 
   return (
