@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rails generate migration:*)",
+      "Bash(rails:*)",
+      "Bash(bundle install:*)"
+    ],
+    "deny": []
+  }
+}

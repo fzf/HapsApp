@@ -8,6 +8,10 @@ import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 
+import { AuthProvider, useAuth } from './AuthContext';
+import LoginScreen from './LoginScreen';
+import RegisterScreen from './RegisterScreen';
+
 Sentry.init({
   dsn: 'https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504',
 
@@ -177,6 +181,8 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
     console.log('API URL:', process.env.EXPO_PUBLIC_API_URL);
     console.log('Locations collected:', locations.length);
 
+    // Note: This will need to be updated to use authenticatedFetch from context
+    // For now, keeping the existing functionality
     fetch(
       process.env.EXPO_PUBLIC_API_URL + '/users/locations',
       {
@@ -236,11 +242,24 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   }
 });
 
-export default Sentry.wrap(function App() {
+function MainApp() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [notification, setNotification] = useState(undefined);
   const notificationListener = useRef();
   const responseListener = useRef();
+  const { isAuthenticated, loading, user } = useAuth();
+  
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <AuthScreens />;
+  }
 
   useEffect(() => {
     registerForPushNotificationsAsync()
@@ -285,6 +304,7 @@ export default Sentry.wrap(function App() {
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'space-around' }}>
+      <Text>Welcome, {user?.email}!</Text>
       <Button title='Try!' onPress={ () => { Sentry.captureException(new Error('First error')) }}/>
       <Text>Your Expo push token: {expoPushToken}</Text>
       <View style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -293,5 +313,23 @@ export default Sentry.wrap(function App() {
         <Text>Data: {notification && JSON.stringify(notification.request.content.data)}</Text>
       </View>
     </View>
+  );
+}
+
+function AuthScreens() {
+  const [isLogin, setIsLogin] = useState(true);
+  
+  return isLogin ? (
+    <LoginScreen onSwitchToRegister={() => setIsLogin(false)} />
+  ) : (
+    <RegisterScreen onSwitchToLogin={() => setIsLogin(true)} />
+  );
+}
+
+export default Sentry.wrap(function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 });
