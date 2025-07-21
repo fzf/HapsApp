@@ -248,18 +248,6 @@ function MainApp() {
   const notificationListener = useRef();
   const responseListener = useRef();
   const { isAuthenticated, loading, user } = useAuth();
-  
-  if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
-  
-  if (!isAuthenticated) {
-    return <AuthScreens />;
-  }
 
   useEffect(() => {
     registerForPushNotificationsAsync()
@@ -301,6 +289,18 @@ function MainApp() {
       api_endpoint: process.env.EXPO_PUBLIC_API_URL + '/users/locations'
     });
   }, [])
+  
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <AuthScreens />;
+  }
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'space-around' }}>
