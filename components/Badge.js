@@ -1,38 +1,89 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 
 export const Badge = ({
   children,
   variant = 'primary',
   size = 'md',
-  className = '',
+  style,
   ...props
 }) => {
-  const baseClasses = 'inline-flex items-center justify-center rounded-full font-medium';
+  const badgeStyle = [
+    styles.base,
+    styles[`variant_${variant}`],
+    styles[`size_${size}`],
+    style
+  ];
 
-  const variants = {
-    primary: 'bg-primary-100 text-primary-800',
-    success: 'bg-success-100 text-success-800',
-    warning: 'bg-warning-100 text-warning-800',
-    danger: 'bg-danger-100 text-danger-800',
-    gray: 'bg-gray-100 text-gray-800',
-    dark: 'bg-gray-800 text-gray-100',
-  };
-
-  const sizes = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-2.5 py-0.5 text-sm',
-    lg: 'px-3 py-1 text-sm',
-  };
+  const textColor = getTextColor(variant);
 
   return (
-    <View
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
-    >
-      <Text className={`${variants[variant].split(' ')[1]} font-medium`}>
+    <View style={badgeStyle} {...props}>
+      <Text style={[styles.text, { color: textColor }]}>
         {children}
       </Text>
     </View>
   );
 };
+
+const getTextColor = (variant) => {
+  switch (variant) {
+    case 'primary':
+      return '#1e40af';
+    case 'success':
+      return '#15803d';
+    case 'warning':
+      return '#a16207';
+    case 'danger':
+      return '#b91c1c';
+    case 'gray':
+      return '#374151';
+    case 'dark':
+      return '#f3f4f6';
+    default:
+      return '#1e40af';
+  }
+};
+
+const styles = StyleSheet.create({
+  base: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    fontWeight: '500',
+  },
+  variant_primary: {
+    backgroundColor: '#dbeafe',
+  },
+  variant_success: {
+    backgroundColor: '#dcfce7',
+  },
+  variant_warning: {
+    backgroundColor: '#fef3c7',
+  },
+  variant_danger: {
+    backgroundColor: '#fee2e2',
+  },
+  variant_gray: {
+    backgroundColor: '#f3f4f6',
+  },
+  variant_dark: {
+    backgroundColor: '#1f2937',
+  },
+  size_sm: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  size_md: {
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  },
+  size_lg: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  text: {
+    fontWeight: '500',
+    fontSize: 12,
+  },
+});

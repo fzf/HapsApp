@@ -9,11 +9,12 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  StyleSheet,
 } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Card, CardContent } from './components/Card';
 import { Button } from './components/Button';
-import { Alert as FlowbiteAlert } from './components/Alert';
+import { Alert as CustomAlert } from './components/Alert';
 
 export default function LoginScreen({ onSwitchToRegister }) {
   const [email, setEmail] = useState('');
@@ -44,36 +45,36 @@ export default function LoginScreen({ onSwitchToRegister }) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
 
       <KeyboardAvoidingView
-        className="flex-1"
+        style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-          <View className="px-6 py-8">
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.content}>
             {/* Header */}
-            <View className="mb-8 items-center">
-              <Text className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</Text>
-              <Text className="text-gray-600 text-center">Sign in to your Haps account</Text>
+            <View style={styles.header}>
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Sign in to your Haps account</Text>
             </View>
 
             {/* Login Form Card */}
-            <Card className="mb-6">
+            <Card style={styles.card}>
               <CardContent>
                 {/* Error Alert */}
                 {error ? (
-                  <FlowbiteAlert variant="danger" className="mb-4">
+                  <CustomAlert variant="danger" style={styles.alert}>
                     {error}
-                  </FlowbiteAlert>
+                  </CustomAlert>
                 ) : null}
 
                 {/* Email Input */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">Email Address</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email Address</Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg px-3 py-2.5"
+                    style={styles.input}
                     value={email}
                     onChangeText={setEmail}
                     placeholder="name@company.com"
@@ -85,10 +86,10 @@ export default function LoginScreen({ onSwitchToRegister }) {
                 </View>
 
                 {/* Password Input */}
-                <View className="mb-6">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">Password</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Password</Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg px-3 py-2.5"
+                    style={styles.input}
                     value={password}
                     onChangeText={setPassword}
                     placeholder="••••••••"
@@ -105,7 +106,7 @@ export default function LoginScreen({ onSwitchToRegister }) {
                   loading={loading}
                   disabled={loading}
                   onPress={handleLogin}
-                  className="w-full mb-4"
+                  style={styles.loginButton}
                 >
                   {loading ? 'Signing In...' : 'Sign In'}
                 </Button>
@@ -114,18 +115,18 @@ export default function LoginScreen({ onSwitchToRegister }) {
                 <Button
                   variant="ghost"
                   onPress={onSwitchToRegister}
-                  className="w-full"
+                  style={styles.switchButton}
                 >
-                  <Text className="text-primary-600">
-                    Don't have an account? <Text className="font-semibold">Sign up</Text>
+                  <Text style={styles.switchText}>
+                    Don't have an account? <Text style={styles.switchTextBold}>Sign up</Text>
                   </Text>
                 </Button>
               </CardContent>
             </Card>
 
             {/* Footer */}
-            <View className="items-center">
-              <Text className="text-sm text-gray-500">Haps Location Tracker</Text>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Haps Location Tracker</Text>
             </View>
           </View>
         </ScrollView>
@@ -133,3 +134,83 @@ export default function LoginScreen({ onSwitchToRegister }) {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  content: {
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+  },
+  header: {
+    marginBottom: 32,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  card: {
+    marginBottom: 24,
+  },
+  alert: {
+    marginBottom: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    color: '#111827',
+    fontSize: 14,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  loginButton: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  switchButton: {
+    width: '100%',
+  },
+  switchText: {
+    color: '#2563eb',
+  },
+  switchTextBold: {
+    fontWeight: '600',
+  },
+  footer: {
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+});

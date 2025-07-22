@@ -1,27 +1,67 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 
 export const Alert = ({
   children,
   variant = 'info',
-  className = '',
+  style,
   ...props
 }) => {
-  const variants = {
-    info: 'bg-primary-50 border-primary-200 text-primary-800',
-    success: 'bg-success-50 border-success-200 text-success-800',
-    warning: 'bg-warning-50 border-warning-200 text-warning-800',
-    danger: 'bg-danger-50 border-danger-200 text-danger-800',
-  };
+  const alertStyle = [
+    styles.base,
+    styles[`variant_${variant}`],
+    style
+  ];
+
+  const textColor = getTextColor(variant);
 
   return (
-    <View
-      className={`border rounded-lg p-4 ${variants[variant]} ${className}`}
-      {...props}
-    >
-      <Text className={variants[variant].split(' ')[2]}>
+    <View style={alertStyle} {...props}>
+      <Text style={[styles.text, { color: textColor }]}>
         {children}
       </Text>
     </View>
   );
 };
+
+const getTextColor = (variant) => {
+  switch (variant) {
+    case 'info':
+      return '#1e40af';
+    case 'success':
+      return '#15803d';
+    case 'warning':
+      return '#a16207';
+    case 'danger':
+      return '#b91c1c';
+    default:
+      return '#1e40af';
+  }
+};
+
+const styles = StyleSheet.create({
+  base: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+  },
+  variant_info: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+  },
+  variant_success: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  variant_warning: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fef3c7',
+  },
+  variant_danger: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  text: {
+    fontSize: 14,
+  },
+});

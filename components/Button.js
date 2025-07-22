@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
 
 export const Button = ({
   children,
@@ -8,54 +8,101 @@ export const Button = ({
   loading = false,
   disabled = false,
   onPress,
-  className = '',
+  style,
   ...props
 }) => {
-  const baseClasses = 'flex-row items-center justify-center rounded-lg font-medium transition-colors';
+  const buttonStyle = [
+    styles.base,
+    styles[`variant_${variant}`],
+    styles[`size_${size}`],
+    disabled && styles.disabled,
+    style
+  ];
 
-  const variants = {
-    primary: 'bg-primary-600 active:bg-primary-700',
-    secondary: 'bg-gray-600 active:bg-gray-700',
-    success: 'bg-success-600 active:bg-success-700',
-    warning: 'bg-warning-600 active:bg-warning-700',
-    danger: 'bg-danger-600 active:bg-danger-700',
-    outline: 'border-2 border-primary-600 bg-transparent active:bg-primary-50',
-    ghost: 'bg-transparent active:bg-gray-100',
-  };
-
-  const sizes = {
-    sm: 'px-3 py-2 text-sm',
-    md: 'px-4 py-2.5 text-sm',
-    lg: 'px-5 py-3 text-base',
-    xl: 'px-6 py-3.5 text-base',
-  };
-
-  const textColors = {
-    primary: 'text-white',
-    secondary: 'text-white',
-    success: 'text-white',
-    warning: 'text-white',
-    danger: 'text-white',
-    outline: 'text-primary-600',
-    ghost: 'text-gray-900',
-  };
-
-  const disabledClasses = disabled ? 'opacity-50' : '';
+  const textColor = getTextColor(variant);
 
   return (
     <TouchableOpacity
-      className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${disabledClasses} ${className}`}
+      style={buttonStyle}
       onPress={onPress}
       disabled={disabled || loading}
       {...props}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={variant === 'outline' || variant === 'ghost' ? '#2563eb' : '#ffffff'} />
+        <ActivityIndicator
+          size="small"
+          color={variant === 'outline' || variant === 'ghost' ? '#2563eb' : '#ffffff'}
+        />
       ) : (
-        <Text className={`${textColors[variant]} font-medium`}>
+        <Text style={[styles.text, { color: textColor }]}>
           {children}
         </Text>
       )}
     </TouchableOpacity>
   );
 };
+
+const getTextColor = (variant) => {
+  switch (variant) {
+    case 'outline':
+    case 'ghost':
+      return '#2563eb';
+    default:
+      return '#ffffff';
+  }
+};
+
+const styles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  variant_primary: {
+    backgroundColor: '#2563eb',
+  },
+  variant_secondary: {
+    backgroundColor: '#4b5563',
+  },
+  variant_success: {
+    backgroundColor: '#16a34a',
+  },
+  variant_warning: {
+    backgroundColor: '#d97706',
+  },
+  variant_danger: {
+    backgroundColor: '#dc2626',
+  },
+  variant_outline: {
+    borderWidth: 2,
+    borderColor: '#2563eb',
+    backgroundColor: 'transparent',
+  },
+  variant_ghost: {
+    backgroundColor: 'transparent',
+  },
+  size_sm: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  size_md: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  size_lg: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  size_xl: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  text: {
+    fontWeight: '500',
+    fontSize: 14,
+  },
+});

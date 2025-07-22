@@ -26,14 +26,12 @@
     "expo-status-bar": "~2.2.3",
     "expo-task-manager": "~13.1.6",
     "expo-updates": "~0.28.17",
-    "nativewind": "^4.1.23",
     "promise": "^8.3.0",
     "react": "19.0.0",
     "react-native": "0.79.5"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "tailwindcss": "^3.4.17"
+    "@babel/core": "^7.20.0"
   },
   "private": true
 }

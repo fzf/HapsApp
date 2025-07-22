@@ -9,11 +9,12 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  StyleSheet,
 } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Card, CardContent } from './components/Card';
 import { Button } from './components/Button';
-import { Alert as FlowbiteAlert } from './components/Alert';
+import { Alert as CustomAlert } from './components/Alert';
 
 export default function RegisterScreen({ onSwitchToLogin }) {
   const [email, setEmail] = useState('');
@@ -55,36 +56,36 @@ export default function RegisterScreen({ onSwitchToLogin }) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
 
       <KeyboardAvoidingView
-        className="flex-1"
+        style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-          <View className="px-6 py-8">
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.content}>
             {/* Header */}
-            <View className="mb-8 items-center">
-              <Text className="text-3xl font-bold text-gray-900 mb-2">Create Account</Text>
-              <Text className="text-gray-600 text-center">Sign up to start tracking your timeline</Text>
+            <View style={styles.header}>
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Sign up to start tracking your timeline</Text>
             </View>
 
             {/* Register Form Card */}
-            <Card className="mb-6">
+            <Card style={styles.card}>
               <CardContent>
                 {/* Error Alert */}
                 {error ? (
-                  <FlowbiteAlert variant="danger" className="mb-4">
+                  <CustomAlert variant="danger" style={styles.alert}>
                     {error}
-                  </FlowbiteAlert>
+                  </CustomAlert>
                 ) : null}
 
                 {/* Email Input */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">Email Address</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email Address</Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg px-3 py-2.5"
+                    style={styles.input}
                     value={email}
                     onChangeText={setEmail}
                     placeholder="name@company.com"
@@ -96,10 +97,10 @@ export default function RegisterScreen({ onSwitchToLogin }) {
                 </View>
 
                 {/* Password Input */}
-                <View className="mb-4">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">Password</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Password</Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg px-3 py-2.5"
+                    style={styles.input}
                     value={password}
                     onChangeText={setPassword}
                     placeholder="••••••••"
@@ -107,14 +108,14 @@ export default function RegisterScreen({ onSwitchToLogin }) {
                     autoCapitalize="none"
                     placeholderTextColor="#9ca3af"
                   />
-                  <Text className="text-xs text-gray-500 mt-1">Must be at least 6 characters</Text>
+                  <Text style={styles.hint}>Must be at least 6 characters</Text>
                 </View>
 
                 {/* Confirm Password Input */}
-                <View className="mb-6">
-                  <Text className="text-sm font-medium text-gray-700 mb-2">Confirm Password</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Confirm Password</Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg px-3 py-2.5"
+                    style={styles.input}
                     value={passwordConfirmation}
                     onChangeText={setPasswordConfirmation}
                     placeholder="••••••••"
@@ -131,7 +132,7 @@ export default function RegisterScreen({ onSwitchToLogin }) {
                   loading={loading}
                   disabled={loading}
                   onPress={handleRegister}
-                  className="w-full mb-4"
+                  style={styles.registerButton}
                 >
                   {loading ? 'Creating Account...' : 'Create Account'}
                 </Button>
@@ -140,18 +141,18 @@ export default function RegisterScreen({ onSwitchToLogin }) {
                 <Button
                   variant="ghost"
                   onPress={onSwitchToLogin}
-                  className="w-full"
+                  style={styles.switchButton}
                 >
-                  <Text className="text-primary-600">
-                    Already have an account? <Text className="font-semibold">Sign in</Text>
+                  <Text style={styles.switchText}>
+                    Already have an account? <Text style={styles.switchTextBold}>Sign in</Text>
                   </Text>
                 </Button>
               </CardContent>
             </Card>
 
             {/* Footer */}
-            <View className="items-center">
-              <Text className="text-sm text-gray-500">Haps Location Tracker</Text>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Haps Location Tracker</Text>
             </View>
           </View>
         </ScrollView>
@@ -159,3 +160,88 @@ export default function RegisterScreen({ onSwitchToLogin }) {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  content: {
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+  },
+  header: {
+    marginBottom: 32,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  card: {
+    marginBottom: 24,
+  },
+  alert: {
+    marginBottom: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    color: '#111827',
+    fontSize: 14,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 4,
+  },
+  registerButton: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  switchButton: {
+    width: '100%',
+  },
+  switchText: {
+    color: '#2563eb',
+  },
+  switchTextBold: {
+    fontWeight: '600',
+  },
+  footer: {
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+});

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, ScrollView, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { Text, View, ScrollView, SafeAreaView, StatusBar, Platform, StyleSheet } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -330,9 +330,9 @@ function MainApp() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-lg text-gray-600">Loading...</Text>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -343,16 +343,16 @@ function MainApp() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
 
-      <ScrollView className="flex-1 px-4 py-6">
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
-        <View className="mb-6">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="text-3xl font-bold text-gray-900 mb-2">Haps Tracker</Text>
-              <Text className="text-gray-600">Welcome, {user?.email}</Text>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Haps Tracker</Text>
+              <Text style={styles.subtitle}>Welcome, {user?.email}</Text>
             </View>
             <Button
               variant="outline"
@@ -365,9 +365,9 @@ function MainApp() {
         </View>
 
         {/* Status Card */}
-        <Card className="mb-6">
+        <Card style={styles.cardMargin}>
           <CardHeader>
-            <View className="flex-row items-center justify-between">
+            <View style={styles.cardHeaderRow}>
               <CardTitle>Tracking Status</CardTitle>
               <Badge variant={getStatusBadgeVariant(locationStatus)}>
                 {getStatusText(locationStatus)}
@@ -375,14 +375,14 @@ function MainApp() {
             </View>
           </CardHeader>
           <CardContent>
-            <View className="space-y-3">
-              <View className="flex-row justify-between">
-                <Text className="text-gray-600">Background Task</Text>
-                <Text className="font-medium text-gray-900">{LOCATION_TASK_NAME}</Text>
+            <View style={styles.infoRows}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Background Task</Text>
+                <Text style={styles.infoValue}>{LOCATION_TASK_NAME}</Text>
               </View>
-              <View className="flex-row justify-between">
-                <Text className="text-gray-600">API Endpoint</Text>
-                <Text className="font-medium text-gray-900 flex-1 text-right" numberOfLines={1}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>API Endpoint</Text>
+                <Text style={[styles.infoValue, styles.apiEndpoint]} numberOfLines={1}>
                   {process.env.EXPO_PUBLIC_API_URL || 'Not configured'}
                 </Text>
               </View>
@@ -391,36 +391,35 @@ function MainApp() {
         </Card>
 
         {/* Authentication Card */}
-        <Card className="mb-6">
+        <Card style={styles.cardMargin}>
           <CardHeader>
-            <View className="flex-row items-center justify-between">
+            <View style={styles.cardHeaderRow}>
               <CardTitle>Authentication</CardTitle>
               <Badge variant="success">Authenticated</Badge>
             </View>
           </CardHeader>
           <CardContent>
-            <View className="space-y-4">
-              <View>
-                <Text className="text-gray-600 text-sm mb-1">User Email</Text>
-                <Text className="font-medium text-gray-900">{user?.email || 'Not available'}</Text>
+            <View style={styles.authContent}>
+              <View style={styles.authRow}>
+                <Text style={styles.authLabel}>User Email</Text>
+                <Text style={styles.authValue}>{user?.email || 'Not available'}</Text>
               </View>
 
-              <View>
-                <Text className="text-gray-600 text-sm mb-1">Auth Token (JWT):</Text>
-                <View className="bg-gray-50 p-3 rounded-lg border">
-                  <Text className="text-xs font-mono text-gray-700" numberOfLines={4}>
+              <View style={styles.authRow}>
+                <Text style={styles.authLabel}>Auth Token (JWT):</Text>
+                <View style={styles.tokenContainer}>
+                  <Text style={styles.tokenText} numberOfLines={4}>
                     {token || 'No token available'}
                   </Text>
                 </View>
               </View>
 
-              <View className="flex-row space-x-2">
+              <View style={styles.buttonRow}>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1"
+                  style={styles.buttonFlex}
                   onPress={() => {
-                    // Copy token to clipboard logic here
                     console.log('Auth token copied to clipboard');
                   }}
                 >
@@ -430,7 +429,7 @@ function MainApp() {
                 <Button
                   variant="danger"
                   size="sm"
-                  className="flex-1"
+                  style={styles.buttonFlex}
                   onPress={() => {
                     console.log('Logging out...');
                     logout();
@@ -444,15 +443,15 @@ function MainApp() {
         </Card>
 
         {/* Push Token Card */}
-        <Card className="mb-6">
+        <Card style={styles.cardMargin}>
           <CardHeader>
             <CardTitle>Push Notifications</CardTitle>
           </CardHeader>
           <CardContent>
-            <View className="space-y-3">
-              <Text className="text-gray-600">Expo Push Token:</Text>
-              <View className="bg-gray-50 p-3 rounded-lg border">
-                <Text className="text-xs font-mono text-gray-700" numberOfLines={3}>
+            <View style={styles.pushContent}>
+              <Text style={styles.pushLabel}>Expo Push Token:</Text>
+              <View style={styles.tokenContainer}>
+                <Text style={styles.tokenText} numberOfLines={3}>
                   {expoPushToken || 'Loading...'}
                 </Text>
               </View>
@@ -461,7 +460,6 @@ function MainApp() {
                   variant="outline"
                   size="sm"
                   onPress={() => {
-                    // Copy to clipboard logic here
                     console.log('Push token copied to clipboard');
                   }}
                 >
@@ -474,29 +472,29 @@ function MainApp() {
 
         {/* Last Notification Card */}
         {notification && (
-          <Card className="mb-6">
+          <Card style={styles.cardMargin}>
             <CardHeader>
               <CardTitle>Latest Notification</CardTitle>
             </CardHeader>
             <CardContent>
-              <View className="space-y-2">
-                <View>
-                  <Text className="text-gray-600 text-sm">Title</Text>
-                  <Text className="font-medium text-gray-900">
+              <View style={styles.notificationContent}>
+                <View style={styles.notificationRow}>
+                  <Text style={styles.notificationLabel}>Title</Text>
+                  <Text style={styles.notificationValue}>
                     {notification.request.content.title || 'No title'}
                   </Text>
                 </View>
-                <View>
-                  <Text className="text-gray-600 text-sm">Body</Text>
-                  <Text className="text-gray-900">
+                <View style={styles.notificationRow}>
+                  <Text style={styles.notificationLabel}>Body</Text>
+                  <Text style={styles.notificationBody}>
                     {notification.request.content.body || 'No body'}
                   </Text>
                 </View>
                 {notification.request.content.data && (
-                  <View>
-                    <Text className="text-gray-600 text-sm">Data</Text>
-                    <View className="bg-gray-50 p-2 rounded border mt-1">
-                      <Text className="text-xs font-mono text-gray-700">
+                  <View style={styles.notificationRow}>
+                    <Text style={styles.notificationLabel}>Data</Text>
+                    <View style={styles.notificationDataContainer}>
+                      <Text style={styles.notificationData}>
                         {JSON.stringify(notification.request.content.data, null, 2)}
                       </Text>
                     </View>
@@ -508,11 +506,11 @@ function MainApp() {
         )}
 
         {/* Action Buttons */}
-        <View className="space-y-3">
+        <View style={styles.actionButtons}>
           <Button
             variant="primary"
+            style={styles.actionButton}
             onPress={() => {
-              // Trigger manual location update
               console.log('Manual location update triggered');
             }}
           >
@@ -521,8 +519,8 @@ function MainApp() {
 
           <Button
             variant="outline"
+            style={styles.actionButton}
             onPress={() => {
-              // Open settings
               console.log('Opening settings...');
             }}
           >
@@ -541,8 +539,8 @@ function MainApp() {
         </View>
 
         {/* Footer */}
-        <View className="mt-8 pt-6 border-t border-gray-200">
-          <Text className="text-center text-sm text-gray-500">
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
             Haps Location Tracker v1.0.0
           </Text>
         </View>
@@ -560,6 +558,160 @@ function AuthScreens() {
     <RegisterScreen onSwitchToLogin={() => setIsLogin(true)} />
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#6b7280',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  header: {
+    marginBottom: 24,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerText: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  subtitle: {
+    color: '#6b7280',
+  },
+  cardMargin: {
+    marginBottom: 24,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  infoRows: {
+    gap: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  infoLabel: {
+    color: '#6b7280',
+  },
+  infoValue: {
+    fontWeight: '500',
+    color: '#111827',
+  },
+  apiEndpoint: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  authContent: {
+    gap: 16,
+  },
+  authRow: {
+    gap: 4,
+  },
+  authLabel: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  authValue: {
+    fontWeight: '500',
+    color: '#111827',
+  },
+  tokenContainer: {
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  tokenText: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#374151',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  buttonFlex: {
+    flex: 1,
+  },
+  pushContent: {
+    gap: 12,
+  },
+  pushLabel: {
+    color: '#6b7280',
+  },
+  notificationContent: {
+    gap: 8,
+  },
+  notificationRow: {
+    gap: 4,
+  },
+  notificationLabel: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  notificationValue: {
+    fontWeight: '500',
+    color: '#111827',
+  },
+  notificationBody: {
+    color: '#111827',
+  },
+  notificationDataContainer: {
+    backgroundColor: '#f9fafb',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginTop: 4,
+  },
+  notificationData: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: '#374151',
+  },
+  actionButtons: {
+    gap: 12,
+  },
+  actionButton: {
+    marginBottom: 12,
+  },
+  footer: {
+    marginTop: 32,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  footerText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+});
 
 export default Sentry.wrap(function App() {
   return (
