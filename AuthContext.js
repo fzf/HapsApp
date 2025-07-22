@@ -1,23 +1,59 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import Constants from 'expo-constants';
 
-const AuthContext = createContext({});
+const AuthContext = createContext();
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__
-  ? 'http://192.168.1.75:3000'
-  : 'https://haps.app');
+const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://haps.app');
+
+// Global auth token cache for background tasks
+// This prevents SecureStore access issues in background contexts
+let CACHED_AUTH_TOKEN = null;
+
+// Helper function to safely get auth token for background tasks
+export async function getAuthTokenForBackgroundTask() {
+  try {
+    // First try to use cached token
+    if (CACHED_AUTH_TOKEN) {
+      return CACHED_AUTH_TOKEN;
+    }
+
+    // Only try SecureStore if we're in foreground or if necessary
+    // This helps avoid "User interaction is not allowed" errors
+    const token = await SecureStore.getItemAsync('authToken');
+    if (token) {
+      CACHED_AUTH_TOKEN = token; // Cache for future background use
+      return token;
+    }
+
+    return null;
+  } catch (error) {
+    // Don't log SecureStore errors to Sentry as they're expected in background
+    console.warn('Could not retrieve auth token for background task:', error.message);
+    return CACHED_AUTH_TOKEN; // Return cached token if available
+  }
+}
+
+// Helper function to update cached auth token
+export function updateCachedAuthToken(token) {
+  CACHED_AUTH_TOKEN = token;
+}
+
+// Helper function to clear cached auth token
+export function clearCachedAuthToken() {
+  CACHED_AUTH_TOKEN = null;
+}
 
 export const AuthProvider = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStoredAuth();
+    checkAuthState();
   }, []);
 
-  const loadStoredAuth = async () => {
+  const checkAuthState = async () => {
     try {
       const storedToken = await SecureStore.getItemAsync('authToken');
       const storedUser = await SecureStore.getItemAsync('user');
@@ -25,9 +61,12 @@ export const AuthProvider = ({ children }) => {
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
+        setIsAuthenticated(true);
+        // Update the cached token for background tasks
+        updateCachedAuthToken(storedToken);
       }
     } catch (error) {
-      console.error('Error loading stored auth:', error);
+      console.error('Error checking auth state:', error);
     } finally {
       setLoading(false);
     }
@@ -35,7 +74,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch(`${API_URL}/api/sessions`, {
+      const response = await fetch(`${API_URL}/users/sign_in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,22 +88,23 @@ export const AuthProvider = ({ children }) => {
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const authToken = response.headers.get('authorization');
+      const data = await response.json();
 
-        if (authToken && data.user) {
-          await SecureStore.setItemAsync('authToken', authToken);
-          await SecureStore.setItemAsync('user', JSON.stringify(data.user));
+      if (response.ok && data.token) {
+        await SecureStore.setItemAsync('authToken', data.token);
+        await SecureStore.setItemAsync('user', JSON.stringify(data.user));
 
-          setToken(authToken);
-          setUser(data.user);
-          return { success: true };
-        }
+        setToken(data.token);
+        setUser(data.user);
+        setIsAuthenticated(true);
+
+        // Update the cached token for background tasks
+        updateCachedAuthToken(data.token);
+
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Login failed' };
       }
-
-      const errorData = await response.json();
-      return { success: false, error: errorData.error || 'Login failed' };
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: 'Network error' };
@@ -73,7 +113,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, passwordConfirmation) => {
     try {
-      const response = await fetch(`${API_URL}/api/registrations`, {
+      const response = await fetch(`${API_URL}/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,22 +128,23 @@ export const AuthProvider = ({ children }) => {
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const authToken = response.headers.get('authorization');
+      const data = await response.json();
 
-        if (authToken && data.user) {
-          await SecureStore.setItemAsync('authToken', authToken);
-          await SecureStore.setItemAsync('user', JSON.stringify(data.user));
+      if (response.ok && data.token) {
+        await SecureStore.setItemAsync('authToken', data.token);
+        await SecureStore.setItemAsync('user', JSON.stringify(data.user));
 
-          setToken(authToken);
-          setUser(data.user);
-          return { success: true };
-        }
+        setToken(data.token);
+        setUser(data.user);
+        setIsAuthenticated(true);
+
+        // Update the cached token for background tasks
+        updateCachedAuthToken(data.token);
+
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Registration failed' };
       }
-
-      const errorData = await response.json();
-      return { success: false, error: errorData.error || 'Registration failed' };
     } catch (error) {
       console.error('Registration error:', error);
       return { success: false, error: 'Network error' };
@@ -112,43 +153,63 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Optional: Call logout endpoint
       if (token) {
-        await fetch(`${API_URL}/api/sessions`, {
+        await fetch(`${API_URL}/users/sign_out`, {
           method: 'DELETE',
           headers: {
             'Authorization': token,
-            'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
         });
       }
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
+
+      // Clear stored credentials
       await SecureStore.deleteItemAsync('authToken');
       await SecureStore.deleteItemAsync('user');
+
+      // Clear cached token for background tasks
+      clearCachedAuthToken();
+
       setToken(null);
       setUser(null);
+      setIsAuthenticated(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if logout API call fails, clear local state
+      await SecureStore.deleteItemAsync('authToken');
+      await SecureStore.deleteItemAsync('user');
+      clearCachedAuthToken();
+      setToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
     }
   };
 
   const authenticatedFetch = async (url, options = {}) => {
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...options.headers,
-    };
-
-    if (token) {
-      headers['Authorization'] = token;
+    if (!token) {
+      throw new Error('No authentication token available');
     }
 
-    return fetch(url, {
+    const defaultHeaders = {
+      'Authorization': token,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    const mergedOptions = {
       ...options,
-      headers,
-    });
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+    };
+
+    return fetch(url, mergedOptions);
   };
 
   const value = {
+    isAuthenticated,
     user,
     token,
     loading,
@@ -156,19 +217,14 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     authenticatedFetch,
-    isAuthenticated: !!token && !!user,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

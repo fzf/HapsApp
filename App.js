@@ -16,7 +16,7 @@ import { Button } from './components/Button';
 import { Badge } from './components/Badge';
 
 // Import authentication components
-import { AuthProvider, useAuth } from './AuthContext';
+import { AuthProvider, useAuth, getAuthTokenForBackgroundTask, updateCachedAuthToken, clearCachedAuthToken } from './AuthContext';
 import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
 
@@ -136,14 +136,27 @@ async function requestLocationPermissions() {
 
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
-    // Log error to Sentry
-    Sentry.captureException(error, {
+    // Properly handle error objects that may have non-standard formats
+    // Fixes MOBILE-4: Object captured as exception with keys: code, message
+    let errorToLog = error;
+
+    // If error is an object with code/message properties, convert to proper Error
+    if (error && typeof error === 'object' && error.code && error.message) {
+      errorToLog = new Error(`${error.code}: ${error.message}`);
+      errorToLog.originalError = error;
+    }
+
+    // Log error to Sentry with better error handling
+    Sentry.captureException(errorToLog, {
       tags: {
-        section: 'background_location_task'
+        section: 'background_location_task',
+        error_type: 'task_manager_error'
       },
       extra: {
         task_name: LOCATION_TASK_NAME,
-        error_message: error.message
+        error_message: error?.message || 'Unknown error',
+        error_code: error?.code || 'UNKNOWN',
+        original_error: error
       }
     });
     console.error('Background location task error:', error);
@@ -181,8 +194,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
     console.log('API URL:', process.env.EXPO_PUBLIC_API_URL);
     console.log('Locations collected:', locations.length);
 
-    // Get auth token for authenticated request
-    SecureStore.getItemAsync('authToken').then(authToken => {
+    // Get auth token for authenticated request using background-safe method
+    // Fixes MOBILE-8: SecureStore access from background tasks
+    getAuthTokenForBackgroundTask().then(authToken => {
       const headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -190,6 +204,19 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 
       if (authToken) {
         headers['Authorization'] = authToken;
+      } else {
+        console.warn('No auth token available for background location upload');
+        // Log missing token to Sentry but don't fail completely
+        Sentry.captureMessage('Background location task: No auth token available', {
+          level: 'warning',
+          tags: {
+            section: 'background_location_task',
+            issue_type: 'missing_auth_token'
+          },
+          extra: {
+            locations_count: locations.length
+          }
+        });
       }
 
       fetch(
@@ -218,24 +245,42 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
               location_details: locationDetails,
               distance_traveled_meters: calculateTotalDistance(locationDetails),
               average_accuracy: calculateAverageAccuracy(locationDetails),
-              max_speed: Math.max(...locationDetails.map(l => l.speed || 0))
+              max_speed: Math.max(...locationDetails.map(l => l.speed || 0)),
+              auth_token_present: !!authToken
             }
           });
           console.log('Location data sent successfully:', responseData);
         } else {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          // Fixes MOBILE-7: Better handling of HTTP 401 errors
+          const errorMessage = `HTTP ${res.status}: ${res.statusText}`;
+          const responseText = await res.text().catch(() => 'Could not read response');
+
+          // Create a more informative error
+          const apiError = new Error(errorMessage);
+          apiError.status = res.status;
+          apiError.statusText = res.statusText;
+          apiError.responseText = responseText;
+
+          throw apiError;
         }
       }).catch((error) => {
-        // Log API errors to Sentry with location context
+        // Enhanced error logging for API failures
+        // Fixes MOBILE-7: HTTP 401 and other API errors
         Sentry.captureException(error, {
           tags: {
             section: 'background_location_task',
-            api_status: 'error'
+            api_status: 'error',
+            http_status: error.status || 'unknown'
           },
           extra: {
             api_url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
             locations_attempted: locations.length,
             error_message: error.message,
+            error_status: error.status,
+            error_status_text: error.statusText,
+            error_response: error.responseText,
+            auth_token_present: !!authToken,
+            auth_token_length: authToken ? authToken.length : 0,
             failed_location_data: locationDetails,
             first_location_coords: locationDetails[0] ?
               `${locationDetails[0].latitude}, ${locationDetails[0].longitude}` : null,
@@ -245,12 +290,15 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
         });
         console.error('Failed to send location data:', error);
       });
-    }).catch((secureStoreError) => {
-      console.error('Failed to get auth token from SecureStore:', secureStoreError);
-      Sentry.captureException(secureStoreError, {
+    }).catch((tokenError) => {
+      console.error('Failed to get auth token for background task:', tokenError);
+      Sentry.captureException(tokenError, {
         tags: {
           section: 'background_location_task',
           error_type: 'auth_token_retrieval'
+        },
+        extra: {
+          locations_count: locations.length
         }
       });
     });
@@ -289,6 +337,15 @@ function MainApp() {
     };
   }, []);
 
+  // Update cached auth token when token changes
+  useEffect(() => {
+    if (token) {
+      updateCachedAuthToken(token);
+    } else {
+      clearCachedAuthToken();
+    }
+  }, [token]);
+
   useEffect(() => {
     requestLocationPermissions().then(() => {
       setLocationStatus('active');
@@ -310,7 +367,7 @@ function MainApp() {
       background_task: LOCATION_TASK_NAME,
       api_endpoint: process.env.EXPO_PUBLIC_API_URL + '/users/locations'
     });
-  }, []);
+  }, [user]);
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {
@@ -502,7 +559,7 @@ function MainApp() {
                 )}
               </View>
             </CardContent>
-          </Card>
+        </Card>
         )}
 
         {/* Action Buttons */}
