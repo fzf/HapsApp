@@ -6,7 +6,11 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:setup": "echo 'Please run this command directly in your terminal:' && echo 'eas credentials:configure-build -p ios --profile production' && echo '' && echo 'Or use:' && echo 'eas credentials -p ios'",
+    "build": "./scripts/build-and-submit.sh --skip-credentials",
+    "build:submit": "./scripts/build-and-submit.sh --auto-submit",
+    "build:android": "./scripts/build-and-submit.sh --platform android --auto-submit"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -22,12 +26,14 @@
     "expo-status-bar": "~2.2.3",
     "expo-task-manager": "~13.1.6",
     "expo-updates": "~0.28.17",
+    "nativewind": "^4.1.23",
     "promise": "^8.3.0",
     "react": "19.0.0",
     "react-native": "0.79.5"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "tailwindcss": "^3.4.17"
   },
   "private": true
 }

@@ -1,31 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, Platform, Button } from 'react-native';
+import { Text, View, ScrollView, SafeAreaView, StatusBar, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 
-import { AuthProvider, useAuth } from './AuthContext';
-import LoginScreen from './LoginScreen';
-import RegisterScreen from './RegisterScreen';
+// Import NativeWind styles
+import './global.css';
+
+// Import Flowbite-style components
+import { Card, CardHeader, CardTitle, CardContent } from './components/Card';
+import { Button } from './components/Button';
+import { Badge } from './components/Badge';
 
 Sentry.init({
   dsn: 'https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504',
-
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
   sendDefaultPii: true,
-
-  // Configure Session Replay
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1,
   integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
-
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
 });
 
 Notifications.setNotificationHandler({
@@ -132,7 +127,7 @@ async function requestLocationPermissions() {
       });
     }
   }
-};
+}
 
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
@@ -181,8 +176,6 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
     console.log('API URL:', process.env.EXPO_PUBLIC_API_URL);
     console.log('Locations collected:', locations.length);
 
-    // Note: This will need to be updated to use authenticatedFetch from context
-    // For now, keeping the existing functionality
     fetch(
       process.env.EXPO_PUBLIC_API_URL + '/users/locations',
       {
@@ -242,12 +235,13 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   }
 });
 
-function MainApp() {
+export default Sentry.wrap(function App() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [notification, setNotification] = useState(undefined);
+  const [locationStatus, setLocationStatus] = useState('checking');
+  const [locationCount, setLocationCount] = useState(0);
   const notificationListener = useRef();
   const responseListener = useRef();
-  const { isAuthenticated, loading, user } = useAuth();
 
   useEffect(() => {
     registerForPushNotificationsAsync()
@@ -273,7 +267,11 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    requestLocationPermissions()
+    requestLocationPermissions().then(() => {
+      setLocationStatus('active');
+    }).catch(() => {
+      setLocationStatus('denied');
+    });
 
     // Set user context for Sentry with location tracking info
     Sentry.setUser({
@@ -288,48 +286,155 @@ function MainApp() {
       background_task: LOCATION_TASK_NAME,
       api_endpoint: process.env.EXPO_PUBLIC_API_URL + '/users/locations'
     });
-  }, [])
-  
-  if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
-  
-  if (!isAuthenticated) {
-    return <AuthScreens />;
-  }
+  }, []);
+
+  const getStatusBadgeVariant = (status) => {
+    switch (status) {
+      case 'active': return 'success';
+      case 'denied': return 'danger';
+      default: return 'warning';
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'active': return 'Location Tracking Active';
+      case 'denied': return 'Location Access Denied';
+      default: return 'Checking Permissions...';
+    }
+  };
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'space-around' }}>
-      <Text>Welcome, {user?.email}!</Text>
-      <Button title='Try!' onPress={ () => { Sentry.captureException(new Error('First error')) }}/>
-      <Text>Your Expo push token: {expoPushToken}</Text>
-      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <Text>Title: {notification && notification.request.content.title} </Text>
-        <Text>Body: {notification && notification.request.content.body}</Text>
-        <Text>Data: {notification && JSON.stringify(notification.request.content.data)}</Text>
-      </View>
-    </View>
-  );
-}
+    <SafeAreaView className="flex-1 bg-gray-50">
+      <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
 
-function AuthScreens() {
-  const [isLogin, setIsLogin] = useState(true);
-  
-  return isLogin ? (
-    <LoginScreen onSwitchToRegister={() => setIsLogin(false)} />
-  ) : (
-    <RegisterScreen onSwitchToLogin={() => setIsLogin(true)} />
-  );
-}
+      <ScrollView className="flex-1 px-4 py-6">
+        {/* Header */}
+        <View className="mb-6">
+          <Text className="text-3xl font-bold text-gray-900 mb-2">Haps Tracker</Text>
+          <Text className="text-gray-600">Location tracking and timeline management</Text>
+        </View>
 
-export default Sentry.wrap(function App() {
-  return (
-    <AuthProvider>
-      <MainApp />
-    </AuthProvider>
+        {/* Status Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <View className="flex-row items-center justify-between">
+              <CardTitle>Tracking Status</CardTitle>
+              <Badge variant={getStatusBadgeVariant(locationStatus)}>
+                {getStatusText(locationStatus)}
+              </Badge>
+            </View>
+          </CardHeader>
+          <CardContent>
+            <View className="space-y-3">
+              <View className="flex-row justify-between">
+                <Text className="text-gray-600">Background Task</Text>
+                <Text className="font-medium text-gray-900">{LOCATION_TASK_NAME}</Text>
+              </View>
+              <View className="flex-row justify-between">
+                <Text className="text-gray-600">API Endpoint</Text>
+                <Text className="font-medium text-gray-900 flex-1 text-right" numberOfLines={1}>
+                  {process.env.EXPO_PUBLIC_API_URL || 'Not configured'}
+                </Text>
+              </View>
+            </View>
+          </CardContent>
+        </Card>
+
+        {/* Push Token Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Push Notifications</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <View className="space-y-3">
+              <Text className="text-gray-600">Expo Push Token:</Text>
+              <View className="bg-gray-50 p-3 rounded-lg border">
+                <Text className="text-xs font-mono text-gray-700" numberOfLines={3}>
+                  {expoPushToken || 'Loading...'}
+                </Text>
+              </View>
+              {expoPushToken && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onPress={() => {
+                    // Copy to clipboard logic here
+                    console.log('Token copied to clipboard');
+                  }}
+                >
+                  Copy Token
+                </Button>
+              )}
+            </View>
+          </CardContent>
+        </Card>
+
+        {/* Last Notification Card */}
+        {notification && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Latest Notification</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <View className="space-y-2">
+                <View>
+                  <Text className="text-gray-600 text-sm">Title</Text>
+                  <Text className="font-medium text-gray-900">
+                    {notification.request.content.title || 'No title'}
+                  </Text>
+                </View>
+                <View>
+                  <Text className="text-gray-600 text-sm">Body</Text>
+                  <Text className="text-gray-900">
+                    {notification.request.content.body || 'No body'}
+                  </Text>
+                </View>
+                {notification.request.content.data && (
+                  <View>
+                    <Text className="text-gray-600 text-sm">Data</Text>
+                    <View className="bg-gray-50 p-2 rounded border mt-1">
+                      <Text className="text-xs font-mono text-gray-700">
+                        {JSON.stringify(notification.request.content.data, null, 2)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Action Buttons */}
+        <View className="space-y-3">
+          <Button
+            variant="primary"
+            onPress={() => {
+              // Trigger manual location update
+              console.log('Manual location update triggered');
+            }}
+          >
+            Trigger Location Update
+          </Button>
+
+          <Button
+            variant="outline"
+            onPress={() => {
+              // Open settings
+              console.log('Opening settings...');
+            }}
+          >
+            App Settings
+          </Button>
+        </View>
+
+        {/* Footer */}
+        <View className="mt-8 pt-6 border-t border-gray-200">
+          <Text className="text-center text-sm text-gray-500">
+            Haps Location Tracker v1.0.0
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 });

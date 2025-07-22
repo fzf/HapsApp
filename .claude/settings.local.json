@@ -6,7 +6,23 @@
       "Bash(grep:*)",
       "Bash(rails generate migration:*)",
       "Bash(rails:*)",
-      "Bash(bundle install:*)"
+      "Bash(bundle install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(chmod:*)",
+      "Bash(eas credentials:*)",
+      "Bash(npm run build:setup:*)",
+      "Bash(npm run build:*)",
+      "Bash(security find-identity:*)",
+      "Bash(ls:*)",
+      "Bash(eas whoami:*)",
+      "Bash(security import:*)",
+      "Bash(./scripts/build-and-submit.sh:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(/Users/fzf/Projects/HapsApp/scripts/build-and-submit.sh:*)",
+      "Bash(npx expo run:ios:*)",
+      "Bash(npx expo:*)"
     ],
     "deny": []
   }

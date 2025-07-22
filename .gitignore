@@ -37,4 +37,11 @@ yarn-error.*
 ios/*
 android/*
 
+# Build output
+build/
+*.ipa
+*.aab
+*.xcarchive
+
 .env.local
+.env
