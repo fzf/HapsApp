@@ -8,8 +8,7 @@ import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 import * as SecureStore from 'expo-secure-store';
 
-// Import NativeWind styles
-import './global.css';
+// NativeWind styles are handled by babel plugin
 
 // Import Flowbite-style components
 import { Card, CardHeader, CardTitle, CardContent } from './components/Card';
