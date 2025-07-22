@@ -4,9 +4,9 @@ import Constants from 'expo-constants';
 
 const AuthContext = createContext({});
 
-const API_URL = __DEV__ 
+const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__
   ? 'http://192.168.1.75:3000'
-  : 'https://haps.app';
+  : 'https://haps.app');
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const storedToken = await SecureStore.getItemAsync('authToken');
       const storedUser = await SecureStore.getItemAsync('user');
-      
+
       if (storedToken && storedUser) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
@@ -52,17 +52,17 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         const data = await response.json();
         const authToken = response.headers.get('authorization');
-        
+
         if (authToken && data.user) {
           await SecureStore.setItemAsync('authToken', authToken);
           await SecureStore.setItemAsync('user', JSON.stringify(data.user));
-          
+
           setToken(authToken);
           setUser(data.user);
           return { success: true };
         }
       }
-      
+
       const errorData = await response.json();
       return { success: false, error: errorData.error || 'Login failed' };
     } catch (error) {
@@ -91,17 +91,17 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         const data = await response.json();
         const authToken = response.headers.get('authorization');
-        
+
         if (authToken && data.user) {
           await SecureStore.setItemAsync('authToken', authToken);
           await SecureStore.setItemAsync('user', JSON.stringify(data.user));
-          
+
           setToken(authToken);
           setUser(data.user);
           return { success: true };
         }
       }
-      
+
       const errorData = await response.json();
       return { success: false, error: errorData.error || 'Registration failed' };
     } catch (error) {

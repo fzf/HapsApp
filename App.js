@@ -6,6 +6,7 @@ import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
+import * as SecureStore from 'expo-secure-store';
 
 // Import NativeWind styles
 import './global.css';
@@ -14,6 +15,11 @@ import './global.css';
 import { Card, CardHeader, CardTitle, CardContent } from './components/Card';
 import { Button } from './components/Button';
 import { Badge } from './components/Badge';
+
+// Import authentication components
+import { AuthProvider, useAuth } from './AuthContext';
+import LoginScreen from './LoginScreen';
+import RegisterScreen from './RegisterScreen';
 
 Sentry.init({
   dsn: 'https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504',
@@ -176,72 +182,90 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
     console.log('API URL:', process.env.EXPO_PUBLIC_API_URL);
     console.log('Locations collected:', locations.length);
 
-    fetch(
-      process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-      {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          locations: locations
-        })
+    // Get auth token for authenticated request
+    SecureStore.getItemAsync('authToken').then(authToken => {
+      const headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+      if (authToken) {
+        headers['Authorization'] = authToken;
       }
-    ).then(async (res) => {
-      if (res.ok) {
-        const responseData = await res.json();
-        // Log successful API call to Sentry with full location details
-        Sentry.captureMessage('Location data sent successfully', {
-          level: 'info',
+
+      fetch(
+        process.env.EXPO_PUBLIC_API_URL + '/users/locations',
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            locations: locations
+          })
+        }
+      ).then(async (res) => {
+        if (res.ok) {
+          const responseData = await res.json();
+          // Log successful API call to Sentry with full location details
+          Sentry.captureMessage('Location data sent successfully', {
+            level: 'info',
+            tags: {
+              section: 'background_location_task',
+              api_status: 'success'
+            },
+            extra: {
+              locations_sent: locations.length,
+              response_status: res.status,
+              response_data: responseData,
+              location_details: locationDetails,
+              distance_traveled_meters: calculateTotalDistance(locationDetails),
+              average_accuracy: calculateAverageAccuracy(locationDetails),
+              max_speed: Math.max(...locationDetails.map(l => l.speed || 0))
+            }
+          });
+          console.log('Location data sent successfully:', responseData);
+        } else {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+      }).catch((error) => {
+        // Log API errors to Sentry with location context
+        Sentry.captureException(error, {
           tags: {
             section: 'background_location_task',
-            api_status: 'success'
+            api_status: 'error'
           },
           extra: {
-            locations_sent: locations.length,
-            response_status: res.status,
-            response_data: responseData,
-            location_details: locationDetails,
-            distance_traveled_meters: calculateTotalDistance(locationDetails),
-            average_accuracy: calculateAverageAccuracy(locationDetails),
-            max_speed: Math.max(...locationDetails.map(l => l.speed || 0))
+            api_url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
+            locations_attempted: locations.length,
+            error_message: error.message,
+            failed_location_data: locationDetails,
+            first_location_coords: locationDetails[0] ?
+              `${locationDetails[0].latitude}, ${locationDetails[0].longitude}` : null,
+            last_location_coords: locationDetails[locationDetails.length - 1] ?
+              `${locationDetails[locationDetails.length - 1].latitude}, ${locationDetails[locationDetails.length - 1].longitude}` : null
           }
         });
-        console.log('Location data sent successfully:', responseData);
-      } else {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-    }).catch((error) => {
-      // Log API errors to Sentry with location context
-      Sentry.captureException(error, {
+        console.error('Failed to send location data:', error);
+      });
+    }).catch((secureStoreError) => {
+      console.error('Failed to get auth token from SecureStore:', secureStoreError);
+      Sentry.captureException(secureStoreError, {
         tags: {
           section: 'background_location_task',
-          api_status: 'error'
-        },
-        extra: {
-          api_url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-          locations_attempted: locations.length,
-          error_message: error.message,
-          failed_location_data: locationDetails,
-          first_location_coords: locationDetails[0] ?
-            `${locationDetails[0].latitude}, ${locationDetails[0].longitude}` : null,
-          last_location_coords: locationDetails[locationDetails.length - 1] ?
-            `${locationDetails[locationDetails.length - 1].latitude}, ${locationDetails[locationDetails.length - 1].longitude}` : null
+          error_type: 'auth_token_retrieval'
         }
       });
-      console.error('Failed to send location data:', error);
     });
   }
 });
 
-export default Sentry.wrap(function App() {
+function MainApp() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [notification, setNotification] = useState(undefined);
   const [locationStatus, setLocationStatus] = useState('checking');
   const [locationCount, setLocationCount] = useState(0);
   const notificationListener = useRef();
   const responseListener = useRef();
+  const { isAuthenticated, loading, user, logout, token } = useAuth();
 
   useEffect(() => {
     registerForPushNotificationsAsync()
@@ -275,7 +299,8 @@ export default Sentry.wrap(function App() {
 
     // Set user context for Sentry with location tracking info
     Sentry.setUser({
-      id: "1", // Your hardcoded user ID
+      id: user?.id?.toString() || "unknown",
+      email: user?.email,
       username: "location_tracker_user"
     });
 
@@ -304,6 +329,20 @@ export default Sentry.wrap(function App() {
     }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-lg text-gray-600">Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthScreens />;
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
@@ -311,8 +350,19 @@ export default Sentry.wrap(function App() {
       <ScrollView className="flex-1 px-4 py-6">
         {/* Header */}
         <View className="mb-6">
-          <Text className="text-3xl font-bold text-gray-900 mb-2">Haps Tracker</Text>
-          <Text className="text-gray-600">Location tracking and timeline management</Text>
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1">
+              <Text className="text-3xl font-bold text-gray-900 mb-2">Haps Tracker</Text>
+              <Text className="text-gray-600">Welcome, {user?.email}</Text>
+            </View>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={logout}
+            >
+              Logout
+            </Button>
+          </View>
         </View>
 
         {/* Status Card */}
@@ -341,6 +391,59 @@ export default Sentry.wrap(function App() {
           </CardContent>
         </Card>
 
+        {/* Authentication Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <View className="flex-row items-center justify-between">
+              <CardTitle>Authentication</CardTitle>
+              <Badge variant="success">Authenticated</Badge>
+            </View>
+          </CardHeader>
+          <CardContent>
+            <View className="space-y-4">
+              <View>
+                <Text className="text-gray-600 text-sm mb-1">User Email</Text>
+                <Text className="font-medium text-gray-900">{user?.email || 'Not available'}</Text>
+              </View>
+
+              <View>
+                <Text className="text-gray-600 text-sm mb-1">Auth Token (JWT):</Text>
+                <View className="bg-gray-50 p-3 rounded-lg border">
+                  <Text className="text-xs font-mono text-gray-700" numberOfLines={4}>
+                    {token || 'No token available'}
+                  </Text>
+                </View>
+              </View>
+
+              <View className="flex-row space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onPress={() => {
+                    // Copy token to clipboard logic here
+                    console.log('Auth token copied to clipboard');
+                  }}
+                >
+                  Copy Token
+                </Button>
+
+                <Button
+                  variant="danger"
+                  size="sm"
+                  className="flex-1"
+                  onPress={() => {
+                    console.log('Logging out...');
+                    logout();
+                  }}
+                >
+                  Logout
+                </Button>
+              </View>
+            </View>
+          </CardContent>
+        </Card>
+
         {/* Push Token Card */}
         <Card className="mb-6">
           <CardHeader>
@@ -360,10 +463,10 @@ export default Sentry.wrap(function App() {
                   size="sm"
                   onPress={() => {
                     // Copy to clipboard logic here
-                    console.log('Token copied to clipboard');
+                    console.log('Push token copied to clipboard');
                   }}
                 >
-                  Copy Token
+                  Copy Push Token
                 </Button>
               )}
             </View>
@@ -426,6 +529,16 @@ export default Sentry.wrap(function App() {
           >
             App Settings
           </Button>
+
+          <Button
+            variant="danger"
+            onPress={() => {
+              console.log('Logging out user...');
+              logout();
+            }}
+          >
+            🚪 Sign Out
+          </Button>
         </View>
 
         {/* Footer */}
@@ -436,5 +549,23 @@ export default Sentry.wrap(function App() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function AuthScreens() {
+  const [isLogin, setIsLogin] = useState(true);
+
+  return isLogin ? (
+    <LoginScreen onSwitchToRegister={() => setIsLogin(false)} />
+  ) : (
+    <RegisterScreen onSwitchToLogin={() => setIsLogin(true)} />
+  );
+}
+
+export default Sentry.wrap(function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 });

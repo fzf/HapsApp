@@ -72,7 +72,8 @@
           "project": "mobile",
           "organization": "haps"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
