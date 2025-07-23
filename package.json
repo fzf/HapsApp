@@ -7,10 +7,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "prebuild": "node scripts/generate-build-info.js",
     "build:setup": "echo 'Please run this command directly in your terminal:' && echo 'eas credentials:configure-build -p ios --profile production' && echo '' && echo 'Or use:' && echo 'eas credentials -p ios'",
-    "build": "./scripts/build-and-submit.sh --skip-credentials",
-    "build:submit": "./scripts/build-and-submit.sh --auto-submit",
-    "build:android": "./scripts/build-and-submit.sh --platform android --auto-submit"
+    "build": "npm run prebuild && ./scripts/build-and-submit.sh --skip-credentials",
+    "build:submit": "npm run prebuild && ./scripts/build-and-submit.sh --auto-submit",
+    "build:android": "npm run prebuild && ./scripts/build-and-submit.sh --platform android --auto-submit"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

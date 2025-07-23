@@ -1,6 +1,6 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# Dependencies
 node_modules/
 
 # Expo
@@ -30,9 +30,13 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env.build
 
 # typescript
 *.tsbuildinfo
+
+# Build info (generated at build time)
+build-info.json
 
 ios/*
 android/*

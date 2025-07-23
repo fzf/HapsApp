@@ -14,6 +14,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Card, CardHeader, CardTitle, CardContent } from './components/Card';
 import { Button } from './components/Button';
 import { Badge } from './components/Badge';
+import { BuildInfo, BuildInfoFooter } from './components/BuildInfo';
 
 // Import authentication components
 import { AuthProvider, useAuth, getAuthTokenForBackgroundTask, updateCachedAuthToken, clearCachedAuthToken } from './AuthContext';
@@ -562,6 +563,9 @@ function MainApp() {
         </Card>
         )}
 
+        {/* Build Information */}
+        <BuildInfo />
+
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <Button
@@ -597,9 +601,7 @@ function MainApp() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Haps Location Tracker v1.0.0
-          </Text>
+          <BuildInfoFooter />
         </View>
       </ScrollView>
     </SafeAreaView>
