@@ -23,15 +23,7 @@
           "location",
           "fetch",
           "remote-notification",
-          "location",
-          "fetch",
-          "remote-notification",
-          "location",
-          "fetch",
-          "remote-notification",
-          "location",
-          "fetch",
-          "remote-notification"
+          "processing"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
