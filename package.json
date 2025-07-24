@@ -14,9 +14,9 @@
     "build:android": "npm run prebuild && ./scripts/build-and-submit.sh --platform android --auto-submit"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^2.2.0",
-    "@sentry/react-native": "^6.17.0",
-    "expo": "^53.0.19",
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@sentry/react-native": "~6.14.0",
+    "expo": "53.0.20",
     "expo-background-task": "^0.2.8",
     "expo-constants": "~17.1.7",
     "expo-dev-client": "~5.2.4",
