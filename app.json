@@ -25,6 +25,9 @@
           "remote-notification",
           "processing"
         ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "background-location-task"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.fzf.HapsApp"
