@@ -122,14 +122,133 @@ function calculateAverageAccuracy(locations) {
     Math.round(accuracies.reduce((sum, acc) => sum + acc, 0) / accuracies.length) : null;
 }
 
+// Check if background location is actively running
+async function getLocationTrackingStatus() {
+  try {
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    const permissions = await Location.getBackgroundPermissionsAsync();
+
+    return {
+      isTracking,
+      isTaskRegistered,
+      hasBackgroundPermission: permissions.granted,
+      permissionStatus: permissions.status
+    };
+  } catch (error) {
+    console.error('Failed to get location tracking status:', error);
+    return {
+      isTracking: false,
+      isTaskRegistered: false,
+      hasBackgroundPermission: false,
+      permissionStatus: 'unknown'
+    };
+  }
+}
+
+// Stop background location tracking
+async function stopLocationTracking() {
+  try {
+    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (isTracking) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      console.log('Background location tracking stopped');
+      Sentry.addBreadcrumb({
+        message: 'Background location tracking stopped',
+        level: 'info'
+      });
+    }
+  } catch (error) {
+    console.error('Failed to stop location tracking:', error);
+    Sentry.captureException(error, {
+      tags: {
+        section: 'location_tracking',
+        error_type: 'stop_tracking_error'
+      }
+    });
+  }
+}
+
+// Restart location tracking with current settings
+async function restartLocationTracking() {
+  try {
+    await stopLocationTracking();
+    await requestLocationPermissions();
+    console.log('Location tracking restarted');
+  } catch (error) {
+    console.error('Failed to restart location tracking:', error);
+  }
+}
+
+// Get current device location manually (for testing)
+async function getCurrentLocationManually() {
+  try {
+    const { granted } = await Location.requestForegroundPermissionsAsync();
+    if (granted) {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+        maximumAge: 1000, // Use location up to 1 second old
+        timeout: 15000 // 15 second timeout
+      });
+
+      console.log('Manual location retrieved:', location);
+      Sentry.addBreadcrumb({
+        message: 'Manual location retrieved',
+        level: 'info',
+        data: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          accuracy: location.coords.accuracy
+        }
+      });
+
+      return location;
+    }
+  } catch (error) {
+    console.error('Failed to get current location:', error);
+    Sentry.captureException(error, {
+      tags: {
+        section: 'location_tracking',
+        error_type: 'manual_location_error'
+      }
+    });
+  }
+}
+
 async function requestLocationPermissions() {
   const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
   if (foregroundStatus === 'granted') {
     const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
     if (backgroundStatus === 'granted') {
+      // Configure for more frequent location updates (prioritizing frequency over battery)
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        deferredUpdatesInterval: 300000,
-        pausesUpdatesAutomatically: true
+        // High accuracy for precise tracking
+        accuracy: Location.Accuracy.BestForNavigation,
+        // Update every 30 seconds (minimum for background)
+        timeInterval: 30000,
+        // Update when device moves 10 meters
+        distanceInterval: 10,
+        // Enable deferred updates but with shorter interval
+        deferredUpdatesInterval: 60000, // 1 minute vs 5 minutes
+        deferredUpdatesDistance: 50, // 50 meters vs default
+        // Disable automatic pausing to maintain tracking
+        pausesUpdatesAutomatically: false,
+        // Enable background activity type for better performance
+        activityType: Location.ActivityType.AutomotiveNavigation,
+        // Show location icon in status bar
+        showsBackgroundLocationIndicator: true
+      });
+
+      console.log('Background location tracking started with high frequency settings');
+      Sentry.addBreadcrumb({
+        message: 'Background location tracking configured for high frequency',
+        level: 'info',
+        data: {
+          accuracy: 'BestForNavigation',
+          timeInterval: 30000,
+          distanceInterval: 10,
+          deferredUpdatesInterval: 60000
+        }
       });
     }
   }
@@ -311,6 +430,12 @@ function MainApp() {
   const [notification, setNotification] = useState(undefined);
   const [locationStatus, setLocationStatus] = useState('checking');
   const [locationCount, setLocationCount] = useState(0);
+  const [locationTrackingDetails, setLocationTrackingDetails] = useState({
+    isTracking: false,
+    isTaskRegistered: false,
+    hasBackgroundPermission: false,
+    permissionStatus: 'unknown'
+  });
   const notificationListener = useRef();
   const responseListener = useRef();
   const { isAuthenticated, loading, user, logout, token } = useAuth();
@@ -348,11 +473,21 @@ function MainApp() {
   }, [token]);
 
   useEffect(() => {
-    requestLocationPermissions().then(() => {
-      setLocationStatus('active');
-    }).catch(() => {
-      setLocationStatus('denied');
-    });
+    const initializeLocationTracking = async () => {
+      try {
+        await requestLocationPermissions();
+        setLocationStatus('active');
+
+        // Get detailed tracking status
+        const trackingStatus = await getLocationTrackingStatus();
+        setLocationTrackingDetails(trackingStatus);
+      } catch (error) {
+        setLocationStatus('denied');
+        console.error('Location initialization failed:', error);
+      }
+    };
+
+    initializeLocationTracking();
 
     // Set user context for Sentry with location tracking info
     Sentry.setUser({
@@ -437,6 +572,24 @@ function MainApp() {
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Background Task</Text>
                 <Text style={styles.infoValue}>{LOCATION_TASK_NAME}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Tracking Active</Text>
+                <Text style={styles.infoValue}>
+                  {locationTrackingDetails.isTracking ? 'Yes' : 'No'}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Task Registered</Text>
+                <Text style={styles.infoValue}>
+                  {locationTrackingDetails.isTaskRegistered ? 'Yes' : 'No'}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Background Permission</Text>
+                <Text style={styles.infoValue}>
+                  {locationTrackingDetails.hasBackgroundPermission ? 'Granted' : 'Denied'}
+                </Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>API Endpoint</Text>
@@ -571,11 +724,30 @@ function MainApp() {
           <Button
             variant="primary"
             style={styles.actionButton}
-            onPress={() => {
+            onPress={async () => {
               console.log('Manual location update triggered');
+              const location = await getCurrentLocationManually();
+              if (location) {
+                // Update tracking status after manual location
+                const trackingStatus = await getLocationTrackingStatus();
+                setLocationTrackingDetails(trackingStatus);
+              }
             }}
           >
-            Trigger Location Update
+            📍 Get Current Location
+          </Button>
+
+          <Button
+            variant="secondary"
+            style={styles.actionButton}
+            onPress={async () => {
+              console.log('Restarting location tracking...');
+              await restartLocationTracking();
+              const trackingStatus = await getLocationTrackingStatus();
+              setLocationTrackingDetails(trackingStatus);
+            }}
+          >
+            🔄 Restart Location Tracking
           </Button>
 
           <Button
