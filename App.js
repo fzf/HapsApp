@@ -199,7 +199,7 @@ async function registerForPushNotificationsAsync() {
 }
 
 const LOCATION_TASK_NAME = 'background-location-task';
-const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes (as requested)
 const HEARTBEAT_TASK_NAME = 'heartbeat-location-task';
 
 // Debug notifications configuration - enabled for testing release builds
@@ -400,12 +400,12 @@ async function requestLocationPermissions() {
   try {
     // Configure react-native-background-geolocation with battery-optimized settings
     await BackgroundGeolocation.ready({
-      // Geolocation Config
-      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
-      distanceFilter: 50, // 50 meters (less aggressive than before)
+            // Geolocation Config (aggressive tracking parameters)
+      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+      distanceFilter: 10, // 10 meters (as requested)
 
       // Activity Recognition
-      stopTimeout: 5, // 5 minutes stationary before stopping
+      stopTimeout: 1, // 1 minute stationary before stopping (more aggressive)
 
       // Application config
       debug: __DEV__, // Enable debug sounds and notifications in dev
@@ -425,19 +425,19 @@ async function requestLocationPermissions() {
         format: 'json'
       },
 
-      // Battery optimization
-      locationUpdateInterval: 300000, // 5 minutes (much better than 30 seconds)
-      fastestLocationUpdateInterval: 60000, // 1 minute minimum
+      // Aggressive tracking intervals (as requested)
+      locationUpdateInterval: 30000, // 30 seconds (as requested)
+      fastestLocationUpdateInterval: 30000, // 30 seconds minimum
 
-      // Motion activity tracking
-      preventSuspend: false,  // Allow iOS to suspend for better battery
+      // Motion activity tracking (aggressive settings)
+      preventSuspend: true,  // Prevent iOS suspend for consistent tracking
       disableMotionActivityUpdates: false,
 
       // Geofencing
       geofenceProximityRadius: 1000,
 
-      // iOS specific
-      pausesLocationUpdatesAutomatically: true, // Let iOS manage pausing
+      // iOS specific (aggressive settings)
+      pausesLocationUpdatesAutomatically: false, // Don't let iOS pause (as requested)
       locationAuthorizationRequest: 'Always',
 
       // Authorization
@@ -458,10 +458,10 @@ async function requestLocationPermissions() {
 
     console.log('✅ react-native-background-geolocation configured and started');
 
-    // Register heartbeat background task (reduced frequency)
+    // Register heartbeat background task (as requested)
     try {
       await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK_NAME, {
-        minimumInterval: 15 // 15 minutes instead of 5 (less aggressive)
+        minimumInterval: 5 // 5 minutes (as requested)
       });
       console.log('Heartbeat background task registered successfully');
     } catch (heartbeatError) {
@@ -474,15 +474,15 @@ async function requestLocationPermissions() {
       });
     }
 
-    console.log('Background location tracking started with battery-optimized settings');
+    console.log('Background location tracking started with aggressive settings');
     Sentry.addBreadcrumb({
-      message: 'Background location tracking configured with battery optimization',
+      message: 'Background location tracking configured with aggressive parameters',
       level: 'info',
       data: {
-        desiredAccuracy: 'NAVIGATION',
-        distanceFilter: 50,
-        locationUpdateInterval: 300000,
-        heartbeatInterval: 15 * 60 * 1000
+        desiredAccuracy: 'HIGH',
+        distanceFilter: 10,
+        locationUpdateInterval: 30000,
+        heartbeatInterval: 5 * 60 * 1000
       }
     });
 

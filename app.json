@@ -18,7 +18,8 @@
         "aps-environment": "production"
       },
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location in the background",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app requires location access to track your position in the background for location-based features.",
+        "NSLocationWhenInUseUsageDescription": "This app requires location access to track your position for location-based features.",
         "UIBackgroundModes": [
           "location",
           "fetch",
@@ -38,6 +39,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "WAKE_LOCK"
+      ],
       "package": "com.fzf.HapsApp"
     },
     "web": {
@@ -48,13 +55,14 @@
         "projectId": "c8618cdd-705b-4a6d-8afa-4c89ce0ce85c"
       }
     },
-    "plugins": [
+        "plugins": [
       [
         "react-native-background-geolocation",
         {
-
+          "license": "",
           "locationAuthorizationRequest": "Always",
-          "backgroundLocationIndicator": false
+          "backgroundLocationIndicator": false,
+          "enableBackgroundLocationUpdates": true
         }
       ],
       [
