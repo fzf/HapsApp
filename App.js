@@ -121,8 +121,8 @@ const LOCATION_TASK_NAME = 'background-location-task';
 const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const HEARTBEAT_TASK_NAME = 'heartbeat-location-task';
 
-// Debug notifications configuration
-const DEBUG_NOTIFICATIONS = __DEV__; // Only in development mode
+// Debug notifications configuration - enabled for testing release builds
+const DEBUG_NOTIFICATIONS = true; // Force enabled for testing (change to __DEV__ for production)
 let ENABLE_LOCATION_DEBUG_NOTIFICATIONS = true; // Default value, can be toggled in UI
 
 // Helper functions for location analysis
@@ -266,10 +266,10 @@ async function getCurrentLocationManually() {
   }
 }
 
-// Test heartbeat functionality (development only)
+// Test heartbeat functionality (debug mode only)
 async function triggerHeartbeatForTesting() {
   try {
-    if (__DEV__) {
+    if (DEBUG_NOTIFICATIONS) {
       console.log('Triggering heartbeat task for testing...');
 
       // Trigger the heartbeat background task
@@ -283,7 +283,7 @@ async function triggerHeartbeatForTesting() {
 
       return result;
     } else {
-      console.warn('Heartbeat testing is only available in development mode');
+      console.warn('Heartbeat testing is only available when debug notifications are enabled');
     }
   } catch (error) {
     console.error('Failed to trigger heartbeat for testing:', error);
@@ -873,7 +873,7 @@ function MainApp() {
                   {process.env.EXPO_PUBLIC_API_URL || 'Not configured'}
                 </Text>
               </View>
-              {__DEV__ && (
+              {DEBUG_NOTIFICATIONS && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Debug Notifications</Text>
                   <Text style={styles.infoValue}>
@@ -1034,7 +1034,7 @@ function MainApp() {
             🔄 Restart Location Tracking
           </Button>
 
-          {__DEV__ && (
+                    {DEBUG_NOTIFICATIONS && (
             <>
               <Button
                 variant="outline"
