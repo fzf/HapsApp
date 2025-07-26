@@ -26,7 +26,8 @@
           "processing"
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
-          "background-location-task"
+          "background-location-task",
+          "heartbeat-location-task"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },

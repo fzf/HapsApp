@@ -3,6 +3,7 @@ import { Text, View, ScrollView, SafeAreaView, StatusBar, Platform, StyleSheet }
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
+import * as BackgroundTask from 'expo-background-task';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
@@ -85,6 +86,8 @@ async function registerForPushNotificationsAsync() {
 }
 
 const LOCATION_TASK_NAME = 'background-location-task';
+const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const HEARTBEAT_TASK_NAME = 'heartbeat-location-task';
 
 // Helper functions for location analysis
 function calculateTotalDistance(locations) {
@@ -127,11 +130,13 @@ async function getLocationTrackingStatus() {
   try {
     const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
     const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    const isHeartbeatRegistered = await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK_NAME);
     const permissions = await Location.getBackgroundPermissionsAsync();
 
     return {
       isTracking,
       isTaskRegistered,
+      isHeartbeatRegistered,
       hasBackgroundPermission: permissions.granted,
       permissionStatus: permissions.status
     };
@@ -140,6 +145,7 @@ async function getLocationTrackingStatus() {
     return {
       isTracking: false,
       isTaskRegistered: false,
+      isHeartbeatRegistered: false,
       hasBackgroundPermission: false,
       permissionStatus: 'unknown'
     };
@@ -153,11 +159,20 @@ async function stopLocationTracking() {
     if (isTracking) {
       await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
       console.log('Background location tracking stopped');
-      Sentry.addBreadcrumb({
-        message: 'Background location tracking stopped',
-        level: 'info'
-      });
     }
+
+    // Also unregister heartbeat task
+    try {
+      await BackgroundTask.unregisterTaskAsync(HEARTBEAT_TASK_NAME);
+      console.log('Heartbeat task unregistered');
+    } catch (heartbeatError) {
+      console.error('Failed to unregister heartbeat task:', heartbeatError);
+    }
+
+    Sentry.addBreadcrumb({
+      message: 'Background location tracking and heartbeat stopped',
+      level: 'info'
+    });
   } catch (error) {
     console.error('Failed to stop location tracking:', error);
     Sentry.captureException(error, {
@@ -215,6 +230,36 @@ async function getCurrentLocationManually() {
   }
 }
 
+// Test heartbeat functionality (development only)
+async function triggerHeartbeatForTesting() {
+  try {
+    if (__DEV__) {
+      console.log('Triggering heartbeat task for testing...');
+
+      // Trigger the heartbeat background task
+      const result = await BackgroundTask.triggerTaskWorkerForTestingAsync();
+      console.log('Heartbeat task triggered:', result);
+
+      Sentry.addBreadcrumb({
+        message: 'Heartbeat task manually triggered for testing',
+        level: 'info'
+      });
+
+      return result;
+    } else {
+      console.warn('Heartbeat testing is only available in development mode');
+    }
+  } catch (error) {
+    console.error('Failed to trigger heartbeat for testing:', error);
+    Sentry.captureException(error, {
+      tags: {
+        section: 'heartbeat_testing',
+        error_type: 'trigger_error'
+      }
+    });
+  }
+}
+
 async function requestLocationPermissions() {
   const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
   if (foregroundStatus === 'granted') {
@@ -237,22 +282,39 @@ async function requestLocationPermissions() {
         activityType: Location.ActivityType.AutomotiveNavigation,
         // Show location icon in status bar
         showsBackgroundLocationIndicator: true
-      });
+              });
 
-      console.log('Background location tracking started with high frequency settings');
-      Sentry.addBreadcrumb({
-        message: 'Background location tracking configured for high frequency',
-        level: 'info',
-        data: {
-          accuracy: 'BestForNavigation',
-          timeInterval: 30000,
-          distanceInterval: 10,
-          deferredUpdatesInterval: 60000
+        // Register heartbeat background task to ensure 5-minute updates
+        try {
+          await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK_NAME, {
+            minimumInterval: 5 // 5 minutes
+          });
+          console.log('Heartbeat background task registered successfully');
+        } catch (heartbeatError) {
+          console.error('Failed to register heartbeat task:', heartbeatError);
+          Sentry.captureException(heartbeatError, {
+            tags: {
+              section: 'heartbeat_task_registration',
+              error_type: 'registration_error'
+            }
+          });
         }
-      });
+
+        console.log('Background location tracking started with high frequency settings + heartbeat');
+        Sentry.addBreadcrumb({
+          message: 'Background location tracking configured with heartbeat',
+          level: 'info',
+          data: {
+            accuracy: 'BestForNavigation',
+            timeInterval: 30000,
+            distanceInterval: 10,
+            deferredUpdatesInterval: 60000,
+            heartbeatInterval: HEARTBEAT_INTERVAL
+          }
+        });
+      }
     }
   }
-}
 
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
@@ -425,6 +487,115 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   }
 });
 
+// Heartbeat task to ensure regular location updates even when stationary
+TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
+  try {
+    console.log('Heartbeat location task triggered');
+
+    // Get current location manually for heartbeat
+    const authToken = await getAuthTokenForBackgroundTask();
+
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+        maximumAge: 10000, // Use location up to 10 seconds old
+        timeout: 30000 // 30 second timeout
+      });
+
+      if (location) {
+        const locationData = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          accuracy: location.coords.accuracy,
+          altitude: location.coords.altitude,
+          heading: location.coords.heading,
+          speed: location.coords.speed,
+          timestamp: new Date(location.timestamp).toISOString(),
+          isHeartbeat: true // Flag to identify heartbeat locations
+        };
+
+        console.log('Heartbeat location collected:', locationData);
+
+        Sentry.addBreadcrumb({
+          message: 'Heartbeat location collected',
+          level: 'info',
+          data: {
+            ...locationData,
+            auth_token_present: !!authToken
+          }
+        });
+
+        // Send heartbeat location to API
+        const headers = {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        };
+
+        if (authToken) {
+          headers['Authorization'] = authToken;
+        }
+
+        const response = await fetch(
+          process.env.EXPO_PUBLIC_API_URL + '/users/locations',
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              locations: [{
+                coords: location.coords,
+                timestamp: location.timestamp,
+                isHeartbeat: true
+              }]
+            })
+          }
+        );
+
+        if (response.ok) {
+          const responseData = await response.json();
+          console.log('Heartbeat location sent successfully:', responseData);
+
+          Sentry.captureMessage('Heartbeat location sent successfully', {
+            level: 'info',
+            tags: {
+              section: 'heartbeat_location_task',
+              api_status: 'success'
+            },
+            extra: {
+              location_data: locationData,
+              response_data: responseData
+            }
+          });
+        } else {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      }
+    } catch (locationError) {
+      console.error('Failed to get heartbeat location:', locationError);
+      Sentry.captureException(locationError, {
+        tags: {
+          section: 'heartbeat_location_task',
+          error_type: 'location_fetch_error'
+        },
+        extra: {
+          auth_token_present: !!authToken
+        }
+      });
+    }
+
+    console.log('Heartbeat task completed successfully');
+    return { status: 'success' };
+  } catch (error) {
+    console.error('Heartbeat task error:', error);
+    Sentry.captureException(error, {
+      tags: {
+        section: 'heartbeat_location_task',
+        error_type: 'task_error'
+      }
+    });
+    return { status: 'failed', error: error.message };
+  }
+});
+
 function MainApp() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [notification, setNotification] = useState(undefined);
@@ -433,6 +604,7 @@ function MainApp() {
   const [locationTrackingDetails, setLocationTrackingDetails] = useState({
     isTracking: false,
     isTaskRegistered: false,
+    isHeartbeatRegistered: false,
     hasBackgroundPermission: false,
     permissionStatus: 'unknown'
   });
@@ -583,6 +755,12 @@ function MainApp() {
                 <Text style={styles.infoLabel}>Task Registered</Text>
                 <Text style={styles.infoValue}>
                   {locationTrackingDetails.isTaskRegistered ? 'Yes' : 'No'}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Heartbeat Active</Text>
+                <Text style={styles.infoValue}>
+                  {locationTrackingDetails.isHeartbeatRegistered ? 'Yes' : 'No'}
                 </Text>
               </View>
               <View style={styles.infoRow}>
@@ -749,6 +927,21 @@ function MainApp() {
           >
             🔄 Restart Location Tracking
           </Button>
+
+          {__DEV__ && (
+            <Button
+              variant="outline"
+              style={styles.actionButton}
+              onPress={async () => {
+                await triggerHeartbeatForTesting();
+                // Update status after triggering heartbeat
+                const trackingStatus = await getLocationTrackingStatus();
+                setLocationTrackingDetails(trackingStatus);
+              }}
+            >
+              💓 Test Heartbeat (5min)
+            </Button>
+          )}
 
           <Button
             variant="outline"
