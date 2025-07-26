@@ -38,10 +38,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
-      ],
       "package": "com.fzf.HapsApp"
     },
     "web": {
@@ -54,12 +50,11 @@
     },
     "plugins": [
       [
-        "expo-location",
+        "react-native-background-geolocation",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location.",
-          "isIosBackgroundLocationEnabled": true,
-          "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true
+
+          "locationAuthorizationRequest": "Always",
+          "backgroundLocationIndicator": false
         }
       ],
       [

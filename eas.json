@@ -28,6 +28,7 @@
   "submit": {
     "production": {
       "ios": {
+        "ascAppId": "595608",
         "appleId": "fletch@fzf.me",
         "appleTeamId": "A483478F88"
       },

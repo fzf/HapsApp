@@ -4,7 +4,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
-import * as Location from 'expo-location';
+import BackgroundGeolocation from 'react-native-background-geolocation';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -39,6 +39,87 @@ async function sendDebugNotification(title, body, data = {}) {
 function toggleDebugNotifications(enabled) {
   ENABLE_LOCATION_DEBUG_NOTIFICATIONS = enabled;
   console.log('[DEBUG] Location debug notifications:', enabled ? 'ENABLED' : 'DISABLED');
+}
+
+// Background Geolocation event handlers
+function onLocationReceived(location) {
+  console.log('[BackgroundGeolocation] Location received:', location);
+
+  // Send debug notification
+  sendDebugNotification(
+    `📍 Location Update`,
+    `Coords: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}\nAccuracy: ${location.coords.accuracy}m\nSpeed: ${location.coords.speed || 0} m/s`,
+    {
+      type: 'bg_geolocation_update',
+      coords: `${location.coords.latitude}, ${location.coords.longitude}`,
+      accuracy: location.coords.accuracy,
+      speed: location.coords.speed
+    }
+  );
+
+  Sentry.addBreadcrumb({
+    message: 'Background geolocation update received',
+    level: 'info',
+    data: {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      accuracy: location.coords.accuracy,
+      speed: location.coords.speed
+    }
+  });
+}
+
+function onLocationError(error) {
+  console.error('[BackgroundGeolocation] Location error:', error);
+
+  sendDebugNotification(
+    '❌ Location Error',
+    `Error: ${error.message || 'Unknown location error'}`,
+    {
+      type: 'bg_geolocation_error',
+      error: error.message
+    }
+  );
+
+  Sentry.captureException(error, {
+    tags: {
+      section: 'background_geolocation',
+      error_type: 'location_error'
+    }
+  });
+}
+
+function onHttpResponse(response) {
+  console.log('[BackgroundGeolocation] HTTP Response:', response);
+
+  if (response.status >= 200 && response.status < 300) {
+    sendDebugNotification(
+      '✅ Location Uploaded',
+      `HTTP ${response.status}: Successfully uploaded location data`,
+      {
+        type: 'bg_geolocation_upload_success',
+        status: response.status
+      }
+    );
+  } else {
+    sendDebugNotification(
+      '❌ Upload Failed',
+      `HTTP ${response.status}: Failed to upload location data`,
+      {
+        type: 'bg_geolocation_upload_error',
+        status: response.status
+      }
+    );
+  }
+
+  Sentry.addBreadcrumb({
+    message: `Background geolocation HTTP response: ${response.status}`,
+    level: response.status >= 200 && response.status < 300 ? 'info' : 'error',
+    data: {
+      status: response.status,
+      responseText: response.responseText
+    }
+  });
 }
 
 // NativeWind styles are handled by babel plugin
@@ -164,17 +245,15 @@ function calculateAverageAccuracy(locations) {
 // Check if background location is actively running
 async function getLocationTrackingStatus() {
   try {
-    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-    const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+    const state = await BackgroundGeolocation.getState();
     const isHeartbeatRegistered = await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK_NAME);
-    const permissions = await Location.getBackgroundPermissionsAsync();
 
     return {
-      isTracking,
-      isTaskRegistered,
+      isTracking: state.enabled,
+      isTaskRegistered: state.enabled,
       isHeartbeatRegistered,
-      hasBackgroundPermission: permissions.granted,
-      permissionStatus: permissions.status
+      hasBackgroundPermission: state.trackingMode === 1, // 1 = Always
+      permissionStatus: state.trackingMode === 1 ? 'granted' : 'denied'
     };
   } catch (error) {
     console.error('Failed to get location tracking status:', error);
@@ -191,11 +270,8 @@ async function getLocationTrackingStatus() {
 // Stop background location tracking
 async function stopLocationTracking() {
   try {
-    const isTracking = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-    if (isTracking) {
-      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-      console.log('Background location tracking stopped');
-    }
+    await BackgroundGeolocation.stop();
+    console.log('Background location tracking stopped');
 
     // Also unregister heartbeat task
     try {
@@ -231,30 +307,54 @@ async function restartLocationTracking() {
   }
 }
 
+// Update authentication headers for background geolocation
+async function updateBackgroundGeolocationAuth(authToken) {
+  try {
+    if (authToken) {
+      await BackgroundGeolocation.setConfig({
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': authToken
+        }
+      });
+      console.log('✅ Background geolocation auth headers updated');
+    } else {
+      await BackgroundGeolocation.setConfig({
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log('⚠️ Background geolocation auth headers cleared');
+    }
+  } catch (error) {
+    console.error('Failed to update background geolocation auth:', error);
+  }
+}
+
 // Get current device location manually (for testing)
 async function getCurrentLocationManually() {
   try {
-    const { granted } = await Location.requestForegroundPermissionsAsync();
-    if (granted) {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-        maximumAge: 1000, // Use location up to 1 second old
-        timeout: 15000 // 15 second timeout
-      });
+    const location = await BackgroundGeolocation.getCurrentPosition({
+      timeout: 15000, // 15 second timeout
+      maximumAge: 1000, // Use location up to 1 second old
+      desiredAccuracy: 10, // 10 meter accuracy
+      samples: 1
+    });
 
-      console.log('Manual location retrieved:', location);
-      Sentry.addBreadcrumb({
-        message: 'Manual location retrieved',
-        level: 'info',
-        data: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          accuracy: location.coords.accuracy
-        }
-      });
+    console.log('Manual location retrieved:', location);
+    Sentry.addBreadcrumb({
+      message: 'Manual location retrieved',
+      level: 'info',
+      data: {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy
+      }
+    });
 
-      return location;
-    }
+    return location;
   } catch (error) {
     console.error('Failed to get current location:', error);
     Sentry.captureException(error, {
@@ -297,264 +397,108 @@ async function triggerHeartbeatForTesting() {
 }
 
 async function requestLocationPermissions() {
-  const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-  if (foregroundStatus === 'granted') {
-    const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-    if (backgroundStatus === 'granted') {
-      // Configure for more frequent location updates (prioritizing frequency over battery)
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        // High accuracy for precise tracking
-        accuracy: Location.Accuracy.BestForNavigation,
-        // Update every 30 seconds (minimum for background)
-        timeInterval: 30000,
-        // Update when device moves 10 meters
-        distanceInterval: 10,
-        // Enable deferred updates but with shorter interval
-        deferredUpdatesInterval: 60000, // 1 minute vs 5 minutes
-        deferredUpdatesDistance: 50, // 50 meters vs default
-        // Disable automatic pausing to maintain tracking
-        pausesUpdatesAutomatically: false,
-        // Enable background activity type for better performance
-        activityType: Location.ActivityType.AutomotiveNavigation,
-        // Hide location icon in status bar/Dynamic Island
-        showsBackgroundLocationIndicator: false
-              });
+  try {
+    // Configure react-native-background-geolocation with battery-optimized settings
+    await BackgroundGeolocation.ready({
+      // Geolocation Config
+      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
+      distanceFilter: 50, // 50 meters (less aggressive than before)
 
-        // Register heartbeat background task to ensure 5-minute updates
-        try {
-          await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK_NAME, {
-            minimumInterval: 5 // 5 minutes
-          });
-          console.log('Heartbeat background task registered successfully');
-        } catch (heartbeatError) {
-          console.error('Failed to register heartbeat task:', heartbeatError);
-          Sentry.captureException(heartbeatError, {
-            tags: {
-              section: 'heartbeat_task_registration',
-              error_type: 'registration_error'
-            }
-          });
-        }
+      // Activity Recognition
+      stopTimeout: 5, // 5 minutes stationary before stopping
 
-        console.log('Background location tracking started with high frequency settings + heartbeat');
-        Sentry.addBreadcrumb({
-          message: 'Background location tracking configured with heartbeat',
-          level: 'info',
-          data: {
-            accuracy: 'BestForNavigation',
-            timeInterval: 30000,
-            distanceInterval: 10,
-            deferredUpdatesInterval: 60000,
-            heartbeatInterval: HEARTBEAT_INTERVAL
-          }
-        });
-      }
-    }
-  }
+      // Application config
+      debug: __DEV__, // Enable debug sounds and notifications in dev
+      logLevel: BackgroundGeolocation.LOG_LEVEL_OFF,
+      stopOnTerminate: false,   // Continue tracking when app is terminated
+      startOnBoot: true,        // Start tracking when device boots
 
-TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
-  if (error) {
-    // Properly handle error objects that may have non-standard formats
-    // Fixes MOBILE-4: Object captured as exception with keys: code, message
-    let errorToLog = error;
-
-    // If error is an object with code/message properties, convert to proper Error
-    if (error && typeof error === 'object' && error.code && error.message) {
-      errorToLog = new Error(`${error.code}: ${error.message}`);
-      errorToLog.originalError = error;
-    }
-
-    // Log error to Sentry with better error handling
-    Sentry.captureException(errorToLog, {
-      tags: {
-        section: 'background_location_task',
-        error_type: 'task_manager_error'
+      // HTTP / SQLite config
+      url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
+      batchSync: false,       // Immediately post each location
+      autoSync: true,         // Automatically post locations
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
       },
-      extra: {
-        task_name: LOCATION_TASK_NAME,
-        error_message: error?.message || 'Unknown error',
-        error_code: error?.code || 'UNKNOWN',
-        original_error: error
+      params: {
+        format: 'json'
+      },
+
+      // Battery optimization
+      locationUpdateInterval: 300000, // 5 minutes (much better than 30 seconds)
+      fastestLocationUpdateInterval: 60000, // 1 minute minimum
+
+      // Motion activity tracking
+      preventSuspend: false,  // Allow iOS to suspend for better battery
+      disableMotionActivityUpdates: false,
+
+      // Geofencing
+      geofenceProximityRadius: 1000,
+
+      // iOS specific
+      pausesLocationUpdatesAutomatically: true, // Let iOS manage pausing
+      locationAuthorizationRequest: 'Always',
+
+      // Authorization
+      authorization: {
+        strategy: BackgroundGeolocation.AUTHORIZATION_STRATEGY_ALWAYS,
+        request: BackgroundGeolocation.AUTHORIZATION_REQUEST_ALWAYS
       }
     });
-    console.error('Background location task error:', error);
-    return;
-  }
 
-  if (data) {
-    const { locations } = data;
+    // Add location listener
+    BackgroundGeolocation.onLocation(onLocationReceived, onLocationError);
 
-    // Log successful location collection to Sentry with detailed location data
-    const locationDetails = locations.map(loc => ({
-      latitude: loc.coords?.latitude,
-      longitude: loc.coords?.longitude,
-      accuracy: loc.coords?.accuracy,
-      altitude: loc.coords?.altitude,
-      heading: loc.coords?.heading,
-      speed: loc.coords?.speed,
-      timestamp: new Date(loc.timestamp).toISOString()
-    }));
+    // Add http listener for debugging
+    BackgroundGeolocation.onHttp(onHttpResponse);
 
+    // Start tracking
+    await BackgroundGeolocation.start();
+
+    console.log('✅ react-native-background-geolocation configured and started');
+
+    // Register heartbeat background task (reduced frequency)
+    try {
+      await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK_NAME, {
+        minimumInterval: 15 // 15 minutes instead of 5 (less aggressive)
+      });
+      console.log('Heartbeat background task registered successfully');
+    } catch (heartbeatError) {
+      console.error('Failed to register heartbeat task:', heartbeatError);
+      Sentry.captureException(heartbeatError, {
+        tags: {
+          section: 'heartbeat_task_registration',
+          error_type: 'registration_error'
+        }
+      });
+    }
+
+    console.log('Background location tracking started with battery-optimized settings');
     Sentry.addBreadcrumb({
-      message: `Background location task collected ${locations.length} locations`,
+      message: 'Background location tracking configured with battery optimization',
       level: 'info',
       data: {
-        location_count: locations.length,
-        api_url: process.env.EXPO_PUBLIC_API_URL,
-        first_location: locationDetails[0],
-        last_location: locationDetails[locationDetails.length - 1],
-        all_locations: locationDetails,
-        time_span_minutes: locations.length > 1 ?
-          (locations[locations.length - 1].timestamp - locations[0].timestamp) / (1000 * 60) : 0
+        desiredAccuracy: 'NAVIGATION',
+        distanceFilter: 50,
+        locationUpdateInterval: 300000,
+        heartbeatInterval: 15 * 60 * 1000
       }
     });
 
-    console.log('API URL:', process.env.EXPO_PUBLIC_API_URL);
-    console.log('Locations collected:', locations.length);
-
-    // Get auth token for authenticated request using background-safe method
-    // Fixes MOBILE-8: SecureStore access from background tasks
-    getAuthTokenForBackgroundTask().then(authToken => {
-      const headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      };
-
-      if (authToken) {
-        headers['Authorization'] = authToken;
-      } else {
-        console.warn('No auth token available for background location upload');
-        // Log missing token to Sentry but don't fail completely
-        Sentry.captureMessage('Background location task: No auth token available', {
-          level: 'warning',
-          tags: {
-            section: 'background_location_task',
-            issue_type: 'missing_auth_token'
-          },
-          extra: {
-            locations_count: locations.length
-          }
-        });
+  } catch (error) {
+    console.error('Failed to configure background geolocation:', error);
+    Sentry.captureException(error, {
+      tags: {
+        section: 'location_tracking',
+        error_type: 'configuration_error'
       }
-
-      fetch(
-        process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            locations: locations
-          })
-        }
-      ).then(async (res) => {
-        if (res.ok) {
-          const responseData = await res.json();
-
-          // Send debug notification for successful location upload
-          if (locations.length > 0) {
-            const firstLocation = locationDetails[0];
-            const lastLocation = locationDetails[locationDetails.length - 1];
-            const distance = calculateTotalDistance(locationDetails);
-
-            await sendDebugNotification(
-              `📍 Location Upload (${locations.length} points)`,
-              `Coords: ${firstLocation.latitude.toFixed(4)}, ${firstLocation.longitude.toFixed(4)}\nDistance: ${distance}m\nAccuracy: ${calculateAverageAccuracy(locationDetails)}m`,
-              {
-                type: 'movement_tracking',
-                locations_count: locations.length,
-                distance_meters: distance,
-                first_coords: `${firstLocation.latitude}, ${firstLocation.longitude}`,
-                average_accuracy: calculateAverageAccuracy(locationDetails)
-              }
-            );
-          }
-
-          // Log successful API call to Sentry with full location details
-          Sentry.captureMessage('Location data sent successfully', {
-            level: 'info',
-            tags: {
-              section: 'background_location_task',
-              api_status: 'success'
-            },
-            extra: {
-              locations_sent: locations.length,
-              response_status: res.status,
-              response_data: responseData,
-              location_details: locationDetails,
-              distance_traveled_meters: calculateTotalDistance(locationDetails),
-              average_accuracy: calculateAverageAccuracy(locationDetails),
-              max_speed: Math.max(...locationDetails.map(l => l.speed || 0)),
-              auth_token_present: !!authToken
-            }
-          });
-          console.log('Location data sent successfully:', responseData);
-        } else {
-          // Fixes MOBILE-7: Better handling of HTTP 401 errors
-          const errorMessage = `HTTP ${res.status}: ${res.statusText}`;
-          const responseText = await res.text().catch(() => 'Could not read response');
-
-          // Send debug notification for API failure
-          await sendDebugNotification(
-            '❌ Location Upload Failed',
-            `HTTP ${res.status}: ${res.statusText}\nLocations: ${locations.length}\nAuth: ${authToken ? 'Present' : 'Missing'}`,
-            {
-              type: 'movement_tracking_error',
-              status: res.status,
-              locations_count: locations.length,
-              auth_token_present: !!authToken,
-              error: errorMessage
-            }
-          );
-
-          // Create a more informative error
-          const apiError = new Error(errorMessage);
-          apiError.status = res.status;
-          apiError.statusText = res.statusText;
-          apiError.responseText = responseText;
-
-          throw apiError;
-        }
-      }).catch((error) => {
-        // Enhanced error logging for API failures
-        // Fixes MOBILE-7: HTTP 401 and other API errors
-        Sentry.captureException(error, {
-          tags: {
-            section: 'background_location_task',
-            api_status: 'error',
-            http_status: error.status || 'unknown'
-          },
-          extra: {
-            api_url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-            locations_attempted: locations.length,
-            error_message: error.message,
-            error_status: error.status,
-            error_status_text: error.statusText,
-            error_response: error.responseText,
-            auth_token_present: !!authToken,
-            auth_token_length: authToken ? authToken.length : 0,
-            failed_location_data: locationDetails,
-            first_location_coords: locationDetails[0] ?
-              `${locationDetails[0].latitude}, ${locationDetails[0].longitude}` : null,
-            last_location_coords: locationDetails[locationDetails.length - 1] ?
-              `${locationDetails[locationDetails.length - 1].latitude}, ${locationDetails[locationDetails.length - 1].longitude}` : null
-          }
-        });
-        console.error('Failed to send location data:', error);
-      });
-    }).catch((tokenError) => {
-      console.error('Failed to get auth token for background task:', tokenError);
-      Sentry.captureException(tokenError, {
-        tags: {
-          section: 'background_location_task',
-          error_type: 'auth_token_retrieval'
-        },
-        extra: {
-          locations_count: locations.length
-        }
-      });
     });
   }
-});
+}
+
+// Note: TaskManager.defineTask(LOCATION_TASK_NAME) removed -
+// react-native-background-geolocation handles location tracking natively
 
 // Heartbeat task to ensure regular location updates even when stationary
 TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
@@ -565,10 +509,11 @@ TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
     const authToken = await getAuthTokenForBackgroundTask();
 
     try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
+      const location = await BackgroundGeolocation.getCurrentPosition({
+        timeout: 30000, // 30 second timeout
         maximumAge: 10000, // Use location up to 10 seconds old
-        timeout: 30000 // 30 second timeout
+        desiredAccuracy: 10, // 10 meter accuracy
+        samples: 1
       });
 
       if (location) {
@@ -737,8 +682,10 @@ function MainApp() {
   useEffect(() => {
     if (token) {
       updateCachedAuthToken(token);
+      updateBackgroundGeolocationAuth(token);
     } else {
       clearCachedAuthToken();
+      updateBackgroundGeolocationAuth(null);
     }
   }, [token]);
 
