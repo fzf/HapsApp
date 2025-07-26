@@ -428,16 +428,12 @@ async function requestLocationPermissions() {
         format: 'json'
       },
 
-      // Aggressive tracking intervals (as requested)
-      locationUpdateInterval: 30000, // 30 seconds (as requested)
-      fastestLocationUpdateInterval: 30000, // 30 seconds minimum
-
       // Motion activity tracking (aggressive settings)
       preventSuspend: true,  // Prevent iOS suspend for consistent tracking
       disableMotionActivityUpdates: false,
 
       // Geofencing
-      geofenceProximityRadius: 1000,
+      geofenceProximityRadius: 30, // 30 meters (reduced from 1000m)
 
       // iOS specific (aggressive settings)
       pausesLocationUpdatesAutomatically: false, // Don't let iOS pause (as requested)
@@ -471,7 +467,7 @@ async function requestLocationPermissions() {
       data: {
         desiredAccuracy: 'HIGH',
         distanceFilter: 10,
-        locationUpdateInterval: 30000,
+        geofenceProximityRadius: 30,
         heartbeatInterval: 300 // Built-in heartbeat: 5 minutes
       }
     });
