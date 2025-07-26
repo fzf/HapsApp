@@ -401,6 +401,17 @@ async function triggerHeartbeatForTesting() {
 
 async function requestLocationPermissions() {
   try {
+    // Get auth token for background requests
+    const authToken = await getAuthTokenForBackgroundTask();
+    if (!authToken) {
+      console.error('No auth token available for background location tracking');
+      Sentry.captureMessage('Background location setup failed: No auth token', {
+        level: 'error',
+        tags: { section: 'background_geolocation', error_type: 'missing_auth_token' }
+      });
+      return;
+    }
+
     // Configure react-native-background-geolocation with battery-optimized settings
     await BackgroundGeolocation.ready({
             // Geolocation Config (aggressive tracking parameters)
@@ -422,7 +433,8 @@ async function requestLocationPermissions() {
       autoSync: true,         // Automatically post locations
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`  // Add auth token for server authentication
       },
       params: {
         format: 'json'
