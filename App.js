@@ -418,7 +418,7 @@ async function requestLocationPermissions() {
 
       // HTTP / SQLite config
       url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-      batchSync: false,       // Immediately post each location
+      batchSync: true,        // Batch locations for efficiency (better for 30s tracking)
       autoSync: true,         // Automatically post locations
       headers: {
         'Accept': 'application/json',
