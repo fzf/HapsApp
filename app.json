@@ -20,6 +20,7 @@
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app requires location access to track your position in the background for location-based features.",
         "NSLocationWhenInUseUsageDescription": "This app requires location access to track your position for location-based features.",
+        "NSMotionUsageDescription": "This app uses motion-detection to determine the motion-activity of the device (walking, vehicle, bicycle, etc)",
         "UIBackgroundModes": [
           "location",
           "fetch",
@@ -27,7 +28,9 @@
           "processing"
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
-          "background-location-task"
+          "background-location-task",
+          "com.transistorsoft.fetch",
+          "com.transistorsoft.customtask"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -64,6 +67,14 @@
           "enableBackgroundLocationUpdates": true
         }
       ],
+      [
+        "expo-gradle-ext-vars",
+        {
+          "googlePlayServicesLocationVersion": "21.1.0",
+          "appCompatVersion": "1.4.2"
+        }
+      ],
+      "react-native-background-fetch",
       [
         "@sentry/react-native/expo",
         {
