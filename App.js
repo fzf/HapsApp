@@ -9,6 +9,38 @@ import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 import * as SecureStore from 'expo-secure-store';
 
+// Helper function to send debug notifications
+async function sendDebugNotification(title, body, data = {}) {
+  if (!DEBUG_NOTIFICATIONS || !ENABLE_LOCATION_DEBUG_NOTIFICATIONS) {
+    return;
+  }
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          ...data,
+          timestamp: new Date().toISOString(),
+          source: 'background_location_debug'
+        },
+        sound: 'default'
+      },
+      trigger: null // Send immediately
+    });
+    console.log('[DEBUG] Notification sent:', title, body);
+  } catch (error) {
+    console.error('[DEBUG] Failed to send notification:', error);
+  }
+}
+
+// Function to toggle debug notifications
+function toggleDebugNotifications(enabled) {
+  ENABLE_LOCATION_DEBUG_NOTIFICATIONS = enabled;
+  console.log('[DEBUG] Location debug notifications:', enabled ? 'ENABLED' : 'DISABLED');
+}
+
 // NativeWind styles are handled by babel plugin
 
 // Import Flowbite-style components
@@ -88,6 +120,10 @@ async function registerForPushNotificationsAsync() {
 const LOCATION_TASK_NAME = 'background-location-task';
 const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const HEARTBEAT_TASK_NAME = 'heartbeat-location-task';
+
+// Debug notifications configuration
+const DEBUG_NOTIFICATIONS = __DEV__; // Only in development mode
+let ENABLE_LOCATION_DEBUG_NOTIFICATIONS = true; // Default value, can be toggled in UI
 
 // Helper functions for location analysis
 function calculateTotalDistance(locations) {
@@ -413,6 +449,26 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
       ).then(async (res) => {
         if (res.ok) {
           const responseData = await res.json();
+
+          // Send debug notification for successful location upload
+          if (locations.length > 0) {
+            const firstLocation = locationDetails[0];
+            const lastLocation = locationDetails[locationDetails.length - 1];
+            const distance = calculateTotalDistance(locationDetails);
+
+            await sendDebugNotification(
+              `📍 Location Upload (${locations.length} points)`,
+              `Coords: ${firstLocation.latitude.toFixed(4)}, ${firstLocation.longitude.toFixed(4)}\nDistance: ${distance}m\nAccuracy: ${calculateAverageAccuracy(locationDetails)}m`,
+              {
+                type: 'movement_tracking',
+                locations_count: locations.length,
+                distance_meters: distance,
+                first_coords: `${firstLocation.latitude}, ${firstLocation.longitude}`,
+                average_accuracy: calculateAverageAccuracy(locationDetails)
+              }
+            );
+          }
+
           // Log successful API call to Sentry with full location details
           Sentry.captureMessage('Location data sent successfully', {
             level: 'info',
@@ -436,6 +492,19 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
           // Fixes MOBILE-7: Better handling of HTTP 401 errors
           const errorMessage = `HTTP ${res.status}: ${res.statusText}`;
           const responseText = await res.text().catch(() => 'Could not read response');
+
+          // Send debug notification for API failure
+          await sendDebugNotification(
+            '❌ Location Upload Failed',
+            `HTTP ${res.status}: ${res.statusText}\nLocations: ${locations.length}\nAuth: ${authToken ? 'Present' : 'Missing'}`,
+            {
+              type: 'movement_tracking_error',
+              status: res.status,
+              locations_count: locations.length,
+              auth_token_present: !!authToken,
+              error: errorMessage
+            }
+          );
 
           // Create a more informative error
           const apiError = new Error(errorMessage);
@@ -550,8 +619,21 @@ TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
           }
         );
 
-        if (response.ok) {
+                if (response.ok) {
           const responseData = await response.json();
+
+          // Send debug notification for successful heartbeat upload
+          await sendDebugNotification(
+            '💓 Heartbeat Location Sent',
+            `Coords: ${locationData.latitude.toFixed(4)}, ${locationData.longitude.toFixed(4)}\nAccuracy: ${locationData.accuracy}m\nTime: ${new Date().toLocaleTimeString()}`,
+            {
+              type: 'heartbeat_tracking',
+              coords: `${locationData.latitude}, ${locationData.longitude}`,
+              accuracy: locationData.accuracy,
+              timestamp: locationData.timestamp
+            }
+          );
+
           console.log('Heartbeat location sent successfully:', responseData);
 
           Sentry.captureMessage('Heartbeat location sent successfully', {
@@ -566,7 +648,22 @@ TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
             }
           });
         } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
+          // Send debug notification for heartbeat failure
+          await sendDebugNotification(
+            '💔 Heartbeat Upload Failed',
+            `HTTP ${response.status}: ${response.statusText}\nCoords: ${locationData.latitude.toFixed(4)}, ${locationData.longitude.toFixed(4)}\nAuth: ${authToken ? 'Present' : 'Missing'}`,
+            {
+              type: 'heartbeat_tracking_error',
+              status: response.status,
+              coords: `${locationData.latitude}, ${locationData.longitude}`,
+              auth_token_present: !!authToken,
+              error: errorMessage
+            }
+          );
+
+          throw new Error(errorMessage);
         }
       }
     } catch (locationError) {
@@ -608,6 +705,7 @@ function MainApp() {
     hasBackgroundPermission: false,
     permissionStatus: 'unknown'
   });
+  const [debugNotificationsEnabled, setDebugNotificationsEnabled] = useState(ENABLE_LOCATION_DEBUG_NOTIFICATIONS);
   const notificationListener = useRef();
   const responseListener = useRef();
   const { isAuthenticated, loading, user, logout, token } = useAuth();
@@ -775,6 +873,14 @@ function MainApp() {
                   {process.env.EXPO_PUBLIC_API_URL || 'Not configured'}
                 </Text>
               </View>
+              {__DEV__ && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Debug Notifications</Text>
+                  <Text style={styles.infoValue}>
+                    {debugNotificationsEnabled ? 'Enabled' : 'Disabled'}
+                  </Text>
+                </View>
+              )}
             </View>
           </CardContent>
         </Card>
@@ -929,18 +1035,41 @@ function MainApp() {
           </Button>
 
           {__DEV__ && (
-            <Button
-              variant="outline"
-              style={styles.actionButton}
-              onPress={async () => {
-                await triggerHeartbeatForTesting();
-                // Update status after triggering heartbeat
-                const trackingStatus = await getLocationTrackingStatus();
-                setLocationTrackingDetails(trackingStatus);
-              }}
-            >
-              💓 Test Heartbeat (5min)
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                style={styles.actionButton}
+                onPress={async () => {
+                  await triggerHeartbeatForTesting();
+                  // Update status after triggering heartbeat
+                  const trackingStatus = await getLocationTrackingStatus();
+                  setLocationTrackingDetails(trackingStatus);
+                }}
+              >
+                💓 Test Heartbeat (5min)
+              </Button>
+
+              <Button
+                variant={debugNotificationsEnabled ? "secondary" : "outline"}
+                style={styles.actionButton}
+                onPress={() => {
+                  const newState = !debugNotificationsEnabled;
+                  setDebugNotificationsEnabled(newState);
+                  toggleDebugNotifications(newState);
+
+                  // Send a test notification to confirm it's working
+                  if (newState) {
+                    sendDebugNotification(
+                      '🔔 Debug Notifications Enabled',
+                      'You will now receive notifications when location data is sent in the background',
+                      { type: 'debug_toggle', enabled: true }
+                    );
+                  }
+                }}
+              >
+                🔔 Debug Notifications: {debugNotificationsEnabled ? 'ON' : 'OFF'}
+              </Button>
+            </>
           )}
 
           <Button
