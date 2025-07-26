@@ -316,8 +316,8 @@ async function requestLocationPermissions() {
         pausesUpdatesAutomatically: false,
         // Enable background activity type for better performance
         activityType: Location.ActivityType.AutomotiveNavigation,
-        // Show location icon in status bar
-        showsBackgroundLocationIndicator: true
+        // Hide location icon in status bar/Dynamic Island
+        showsBackgroundLocationIndicator: false
               });
 
         // Register heartbeat background task to ensure 5-minute updates
