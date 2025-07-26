@@ -3,7 +3,7 @@ import { Text, View, ScrollView, SafeAreaView, StatusBar, Platform, StyleSheet }
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import * as BackgroundTask from 'expo-background-task';
+
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
@@ -199,8 +199,6 @@ async function registerForPushNotificationsAsync() {
 }
 
 const LOCATION_TASK_NAME = 'background-location-task';
-const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 minutes (as requested)
-const HEARTBEAT_TASK_NAME = 'heartbeat-location-task';
 
 // Debug notifications configuration - enabled for testing release builds
 const DEBUG_NOTIFICATIONS = true; // Force enabled for testing (change to __DEV__ for production)
@@ -246,14 +244,14 @@ function calculateAverageAccuracy(locations) {
 async function getLocationTrackingStatus() {
   try {
     const state = await BackgroundGeolocation.getState();
-    const isHeartbeatRegistered = await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK_NAME);
 
     return {
       isTracking: state.enabled,
       isTaskRegistered: state.enabled,
-      isHeartbeatRegistered,
+      isHeartbeatRegistered: state.enabled && state.heartbeatInterval > 0, // Built-in heartbeat
       hasBackgroundPermission: state.trackingMode === 1, // 1 = Always
-      permissionStatus: state.trackingMode === 1 ? 'granted' : 'denied'
+      permissionStatus: state.trackingMode === 1 ? 'granted' : 'denied',
+      heartbeatInterval: state.heartbeatInterval
     };
   } catch (error) {
     console.error('Failed to get location tracking status:', error);
@@ -262,7 +260,8 @@ async function getLocationTrackingStatus() {
       isTaskRegistered: false,
       isHeartbeatRegistered: false,
       hasBackgroundPermission: false,
-      permissionStatus: 'unknown'
+      permissionStatus: 'unknown',
+      heartbeatInterval: 0
     };
   }
 }
@@ -271,18 +270,10 @@ async function getLocationTrackingStatus() {
 async function stopLocationTracking() {
   try {
     await BackgroundGeolocation.stop();
-    console.log('Background location tracking stopped');
-
-    // Also unregister heartbeat task
-    try {
-      await BackgroundTask.unregisterTaskAsync(HEARTBEAT_TASK_NAME);
-      console.log('Heartbeat task unregistered');
-    } catch (heartbeatError) {
-      console.error('Failed to unregister heartbeat task:', heartbeatError);
-    }
+    console.log('Background location tracking and built-in heartbeat stopped');
 
     Sentry.addBreadcrumb({
-      message: 'Background location tracking and heartbeat stopped',
+      message: 'Background location tracking and built-in heartbeat stopped',
       level: 'info'
     });
   } catch (error) {
@@ -370,23 +361,35 @@ async function getCurrentLocationManually() {
 async function triggerHeartbeatForTesting() {
   try {
     if (DEBUG_NOTIFICATIONS) {
-      console.log('Triggering heartbeat task for testing...');
+      console.log('Triggering built-in heartbeat for testing...');
 
-      // Trigger the heartbeat background task
-      const result = await BackgroundTask.triggerTaskWorkerForTestingAsync();
-      console.log('Heartbeat task triggered:', result);
+      // Get current location manually to simulate heartbeat
+      const location = await getCurrentLocationManually();
+
+      if (location) {
+        // Send debug notification to show heartbeat test worked
+        await sendDebugNotification(
+          '💓 Heartbeat Test Triggered',
+          `Manually triggered location fetch:\nCoords: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}\nAccuracy: ${location.coords.accuracy}m`,
+          {
+            type: 'heartbeat_test',
+            coords: `${location.coords.latitude}, ${location.coords.longitude}`,
+            accuracy: location.coords.accuracy
+          }
+        );
+      }
 
       Sentry.addBreadcrumb({
-        message: 'Heartbeat task manually triggered for testing',
+        message: 'Built-in heartbeat manually tested via location fetch',
         level: 'info'
       });
 
-      return result;
+      return { status: 'success', location };
     } else {
       console.warn('Heartbeat testing is only available when debug notifications are enabled');
     }
   } catch (error) {
-    console.error('Failed to trigger heartbeat for testing:', error);
+    console.error('Failed to test heartbeat:', error);
     Sentry.captureException(error, {
       tags: {
         section: 'heartbeat_testing',
@@ -444,7 +447,10 @@ async function requestLocationPermissions() {
       authorization: {
         strategy: BackgroundGeolocation.AUTHORIZATION_STRATEGY_ALWAYS,
         request: BackgroundGeolocation.AUTHORIZATION_REQUEST_ALWAYS
-      }
+      },
+
+      // Built-in heartbeat (replaces our custom heartbeat task)
+      heartbeatInterval: 300 // 5 minutes in seconds (300s = 5min)
     });
 
     // Add location listener
@@ -456,33 +462,17 @@ async function requestLocationPermissions() {
     // Start tracking
     await BackgroundGeolocation.start();
 
-    console.log('✅ react-native-background-geolocation configured and started');
-
-    // Register heartbeat background task (as requested)
-    try {
-      await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK_NAME, {
-        minimumInterval: 5 // 5 minutes (as requested)
-      });
-      console.log('Heartbeat background task registered successfully');
-    } catch (heartbeatError) {
-      console.error('Failed to register heartbeat task:', heartbeatError);
-      Sentry.captureException(heartbeatError, {
-        tags: {
-          section: 'heartbeat_task_registration',
-          error_type: 'registration_error'
-        }
-      });
-    }
+    console.log('✅ react-native-background-geolocation configured and started with built-in heartbeat');
 
     console.log('Background location tracking started with aggressive settings');
     Sentry.addBreadcrumb({
-      message: 'Background location tracking configured with aggressive parameters',
+      message: 'Background location tracking configured with aggressive parameters and built-in heartbeat',
       level: 'info',
       data: {
         desiredAccuracy: 'HIGH',
         distanceFilter: 10,
         locationUpdateInterval: 30000,
-        heartbeatInterval: 5 * 60 * 1000
+        heartbeatInterval: 300 // Built-in heartbeat: 5 minutes
       }
     });
 
@@ -500,143 +490,8 @@ async function requestLocationPermissions() {
 // Note: TaskManager.defineTask(LOCATION_TASK_NAME) removed -
 // react-native-background-geolocation handles location tracking natively
 
-// Heartbeat task to ensure regular location updates even when stationary
-TaskManager.defineTask(HEARTBEAT_TASK_NAME, async () => {
-  try {
-    console.log('Heartbeat location task triggered');
-
-    // Get current location manually for heartbeat
-    const authToken = await getAuthTokenForBackgroundTask();
-
-    try {
-      const location = await BackgroundGeolocation.getCurrentPosition({
-        timeout: 30000, // 30 second timeout
-        maximumAge: 10000, // Use location up to 10 seconds old
-        desiredAccuracy: 10, // 10 meter accuracy
-        samples: 1
-      });
-
-      if (location) {
-        const locationData = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          accuracy: location.coords.accuracy,
-          altitude: location.coords.altitude,
-          heading: location.coords.heading,
-          speed: location.coords.speed,
-          timestamp: new Date(location.timestamp).toISOString(),
-          isHeartbeat: true // Flag to identify heartbeat locations
-        };
-
-        console.log('Heartbeat location collected:', locationData);
-
-        Sentry.addBreadcrumb({
-          message: 'Heartbeat location collected',
-          level: 'info',
-          data: {
-            ...locationData,
-            auth_token_present: !!authToken
-          }
-        });
-
-        // Send heartbeat location to API
-        const headers = {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        };
-
-        if (authToken) {
-          headers['Authorization'] = authToken;
-        }
-
-        const response = await fetch(
-          process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-          {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              locations: [{
-                coords: location.coords,
-                timestamp: location.timestamp,
-                isHeartbeat: true
-              }]
-            })
-          }
-        );
-
-                if (response.ok) {
-          const responseData = await response.json();
-
-          // Send debug notification for successful heartbeat upload
-          await sendDebugNotification(
-            '💓 Heartbeat Location Sent',
-            `Coords: ${locationData.latitude.toFixed(4)}, ${locationData.longitude.toFixed(4)}\nAccuracy: ${locationData.accuracy}m\nTime: ${new Date().toLocaleTimeString()}`,
-            {
-              type: 'heartbeat_tracking',
-              coords: `${locationData.latitude}, ${locationData.longitude}`,
-              accuracy: locationData.accuracy,
-              timestamp: locationData.timestamp
-            }
-          );
-
-          console.log('Heartbeat location sent successfully:', responseData);
-
-          Sentry.captureMessage('Heartbeat location sent successfully', {
-            level: 'info',
-            tags: {
-              section: 'heartbeat_location_task',
-              api_status: 'success'
-            },
-            extra: {
-              location_data: locationData,
-              response_data: responseData
-            }
-          });
-        } else {
-          const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-
-          // Send debug notification for heartbeat failure
-          await sendDebugNotification(
-            '💔 Heartbeat Upload Failed',
-            `HTTP ${response.status}: ${response.statusText}\nCoords: ${locationData.latitude.toFixed(4)}, ${locationData.longitude.toFixed(4)}\nAuth: ${authToken ? 'Present' : 'Missing'}`,
-            {
-              type: 'heartbeat_tracking_error',
-              status: response.status,
-              coords: `${locationData.latitude}, ${locationData.longitude}`,
-              auth_token_present: !!authToken,
-              error: errorMessage
-            }
-          );
-
-          throw new Error(errorMessage);
-        }
-      }
-    } catch (locationError) {
-      console.error('Failed to get heartbeat location:', locationError);
-      Sentry.captureException(locationError, {
-        tags: {
-          section: 'heartbeat_location_task',
-          error_type: 'location_fetch_error'
-        },
-        extra: {
-          auth_token_present: !!authToken
-        }
-      });
-    }
-
-    console.log('Heartbeat task completed successfully');
-    return { status: 'success' };
-  } catch (error) {
-    console.error('Heartbeat task error:', error);
-    Sentry.captureException(error, {
-      tags: {
-        section: 'heartbeat_location_task',
-        error_type: 'task_error'
-      }
-    });
-    return { status: 'failed', error: error.message };
-  }
-});
+// Note: Custom heartbeat task removed -
+// react-native-background-geolocation handles heartbeat natively via heartbeatInterval config
 
 function MainApp() {
   const [expoPushToken, setExpoPushToken] = useState('');
@@ -988,12 +843,12 @@ function MainApp() {
                 style={styles.actionButton}
                 onPress={async () => {
                   await triggerHeartbeatForTesting();
-                  // Update status after triggering heartbeat
+                  // Update status after triggering heartbeat test
                   const trackingStatus = await getLocationTrackingStatus();
                   setLocationTrackingDetails(trackingStatus);
                 }}
               >
-                💓 Test Heartbeat (5min)
+                💓 Test Built-in Heartbeat
               </Button>
 
               <Button
