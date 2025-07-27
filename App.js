@@ -248,20 +248,16 @@ async function getLocationTrackingStatus() {
     return {
       isTracking: state.enabled,
       isTaskRegistered: state.enabled,
-      isHeartbeatRegistered: state.enabled && state.heartbeatInterval > 0, // Built-in heartbeat
       hasBackgroundPermission: state.trackingMode === 1, // 1 = Always
-      permissionStatus: state.trackingMode === 1 ? 'granted' : 'denied',
-      heartbeatInterval: state.heartbeatInterval
+      permissionStatus: state.trackingMode === 1 ? 'granted' : 'denied'
     };
   } catch (error) {
     console.error('Failed to get location tracking status:', error);
     return {
       isTracking: false,
       isTaskRegistered: false,
-      isHeartbeatRegistered: false,
       hasBackgroundPermission: false,
-      permissionStatus: 'unknown',
-      heartbeatInterval: 0
+      permissionStatus: 'unknown'
     };
   }
 }
@@ -270,10 +266,10 @@ async function getLocationTrackingStatus() {
 async function stopLocationTracking() {
   try {
     await BackgroundGeolocation.stop();
-    console.log('Background location tracking and built-in heartbeat stopped');
+    console.log('Background location tracking stopped');
 
     Sentry.addBreadcrumb({
-      message: 'Background location tracking and built-in heartbeat stopped',
+      message: 'Background location tracking stopped',
       level: 'info'
     });
   } catch (error) {
@@ -357,47 +353,7 @@ async function getCurrentLocationManually() {
   }
 }
 
-// Test heartbeat functionality (debug mode only)
-async function triggerHeartbeatForTesting() {
-  try {
-    if (DEBUG_NOTIFICATIONS) {
-      console.log('Triggering built-in heartbeat for testing...');
 
-      // Get current location manually to simulate heartbeat
-      const location = await getCurrentLocationManually();
-
-      if (location) {
-        // Send debug notification to show heartbeat test worked
-        await sendDebugNotification(
-          '💓 Heartbeat Test Triggered',
-          `Manually triggered location fetch:\nCoords: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}\nAccuracy: ${location.coords.accuracy}m`,
-          {
-            type: 'heartbeat_test',
-            coords: `${location.coords.latitude}, ${location.coords.longitude}`,
-            accuracy: location.coords.accuracy
-          }
-        );
-      }
-
-      Sentry.addBreadcrumb({
-        message: 'Built-in heartbeat manually tested via location fetch',
-        level: 'info'
-      });
-
-      return { status: 'success', location };
-    } else {
-      console.warn('Heartbeat testing is only available when debug notifications are enabled');
-    }
-  } catch (error) {
-    console.error('Failed to test heartbeat:', error);
-    Sentry.captureException(error, {
-      tags: {
-        section: 'heartbeat_testing',
-        error_type: 'trigger_error'
-      }
-    });
-  }
-}
 
 async function requestLocationPermissions() {
   try {
@@ -457,7 +413,7 @@ async function requestLocationPermissions() {
         request: BackgroundGeolocation.AUTHORIZATION_REQUEST_ALWAYS
       },
 
-      // Built-in heartbeat (replaces our custom heartbeat task)
+      // Heartbeat interval
       heartbeatInterval: 300 // 5 minutes in seconds (300s = 5min)
     });
 
@@ -470,17 +426,16 @@ async function requestLocationPermissions() {
     // Start tracking
     await BackgroundGeolocation.start();
 
-    console.log('✅ react-native-background-geolocation configured and started with built-in heartbeat');
+    console.log('✅ react-native-background-geolocation configured and started');
 
     console.log('Background location tracking started with aggressive settings');
     Sentry.addBreadcrumb({
-      message: 'Background location tracking configured with aggressive parameters and built-in heartbeat',
+      message: 'Background location tracking configured with aggressive parameters',
       level: 'info',
       data: {
         desiredAccuracy: 'HIGH',
         distanceFilter: 10,
-        geofenceProximityRadius: 30,
-        heartbeatInterval: 300 // Built-in heartbeat: 5 minutes
+        geofenceProximityRadius: 30
       }
     });
 
@@ -498,8 +453,7 @@ async function requestLocationPermissions() {
 // Note: TaskManager.defineTask(LOCATION_TASK_NAME) removed -
 // react-native-background-geolocation handles location tracking natively
 
-// Note: Custom heartbeat task removed -
-// react-native-background-geolocation handles heartbeat natively via heartbeatInterval config
+
 
 function MainApp() {
   const [expoPushToken, setExpoPushToken] = useState('');
@@ -509,7 +463,6 @@ function MainApp() {
   const [locationTrackingDetails, setLocationTrackingDetails] = useState({
     isTracking: false,
     isTaskRegistered: false,
-    isHeartbeatRegistered: false,
     hasBackgroundPermission: false,
     permissionStatus: 'unknown'
   });
@@ -665,12 +618,7 @@ function MainApp() {
                   {locationTrackingDetails.isTaskRegistered ? 'Yes' : 'No'}
                 </Text>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Heartbeat Active</Text>
-                <Text style={styles.infoValue}>
-                  {locationTrackingDetails.isHeartbeatRegistered ? 'Yes' : 'No'}
-                </Text>
-              </View>
+
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Background Permission</Text>
                 <Text style={styles.infoValue}>
@@ -846,18 +794,7 @@ function MainApp() {
 
                     {DEBUG_NOTIFICATIONS && (
             <>
-              <Button
-                variant="outline"
-                style={styles.actionButton}
-                onPress={async () => {
-                  await triggerHeartbeatForTesting();
-                  // Update status after triggering heartbeat test
-                  const trackingStatus = await getLocationTrackingStatus();
-                  setLocationTrackingDetails(trackingStatus);
-                }}
-              >
-                💓 Test Built-in Heartbeat
-              </Button>
+
 
               <Button
                 variant={debugNotificationsEnabled ? "secondary" : "outline"}
