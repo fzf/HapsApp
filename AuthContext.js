@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch(`${API_URL}/users/sign_in`, {
+      const response = await fetch(`${API_URL}/api/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, passwordConfirmation) => {
     try {
-      const response = await fetch(`${API_URL}/users`, {
+      const response = await fetch(`${API_URL}/api/registrations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Optional: Call logout endpoint
       if (token) {
-        await fetch(`${API_URL}/users/sign_out`, {
+        await fetch(`${API_URL}/api/sessions`, {
           method: 'DELETE',
           headers: {
             'Authorization': token,
