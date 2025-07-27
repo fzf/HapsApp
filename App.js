@@ -122,6 +122,81 @@ function onHttpResponse(response) {
   });
 }
 
+async function onHeartbeat(params) {
+  console.log('[BackgroundGeolocation] Heartbeat:', params);
+
+  const timestamp = new Date().toISOString();
+  const isMoving = params.location ? 'moving' : 'stationary';
+
+  sendDebugNotification(
+    '💓 Heartbeat',
+    `${new Date().toLocaleTimeString()} - Status: ${isMoving}\nBattery: ${params.battery?.level ? Math.round(params.battery.level * 100) + '%' : 'unknown'}`,
+    {
+      type: 'bg_geolocation_heartbeat',
+      timestamp: timestamp,
+      isMoving: isMoving,
+      batteryLevel: params.battery?.level,
+      location: params.location ? {
+        lat: params.location.coords.latitude,
+        lng: params.location.coords.longitude,
+        accuracy: params.location.coords.accuracy
+      } : null
+    }
+  );
+
+  // Send heartbeat data to backend
+  try {
+    const authToken = await getAuthTokenForBackgroundTask();
+    if (authToken && process.env.EXPO_PUBLIC_API_URL) {
+      const heartbeatData = {
+        type: 'heartbeat',
+        timestamp: timestamp,
+        source: 'background_geolocation_heartbeat',
+        status: isMoving,
+        battery_level: params.battery?.level,
+        location: params.location ? {
+          latitude: params.location.coords.latitude,
+          longitude: params.location.coords.longitude,
+          accuracy: params.location.coords.accuracy,
+          speed: params.location.coords.speed,
+          heading: params.location.coords.heading,
+          timestamp: params.location.timestamp
+        } : null
+      };
+
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/users/locations`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(heartbeatData)
+      });
+
+      if (response.ok) {
+        console.log('[BackgroundGeolocation] Heartbeat sent to backend successfully');
+      } else {
+        console.warn('[BackgroundGeolocation] Failed to send heartbeat to backend:', response.status);
+      }
+    }
+  } catch (error) {
+    console.error('[BackgroundGeolocation] Error sending heartbeat to backend:', error);
+  }
+
+  Sentry.addBreadcrumb({
+    message: 'Background geolocation heartbeat',
+    level: 'info',
+    data: {
+      timestamp: timestamp,
+      isMoving: isMoving,
+      batteryLevel: params.battery?.level,
+      hasLocation: !!params.location,
+      heartbeatInterval: 300 // 5 minutes
+    }
+  });
+}
+
 // NativeWind styles are handled by babel plugin
 
 // Import Flowbite-style components
@@ -394,7 +469,8 @@ async function requestLocationPermissions() {
         'Authorization': `Bearer ${authToken}`  // Add auth token for server authentication
       },
       params: {
-        format: 'json'
+        format: 'json',
+        source: 'background_geolocation'
       },
 
       // Motion activity tracking (aggressive settings)
@@ -423,6 +499,9 @@ async function requestLocationPermissions() {
 
     // Add http listener for debugging
     BackgroundGeolocation.onHttp(onHttpResponse);
+
+    // Add heartbeat listener for monitoring background health
+    BackgroundGeolocation.onHeartbeat(onHeartbeat);
 
     // Start tracking
     await BackgroundGeolocation.start();
