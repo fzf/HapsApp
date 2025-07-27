@@ -129,6 +129,7 @@ import { Card, CardHeader, CardTitle, CardContent } from './components/Card';
 import { Button } from './components/Button';
 import { Badge } from './components/Badge';
 import { BuildInfo, BuildInfoFooter } from './components/BuildInfo';
+import TimelineMapView from './components/TimelineMapView';
 
 // Import authentication components
 import { AuthProvider, useAuth, getAuthTokenForBackgroundTask, updateCachedAuthToken, clearCachedAuthToken } from './AuthContext';
@@ -460,6 +461,7 @@ function MainApp() {
   const [notification, setNotification] = useState(undefined);
   const [locationStatus, setLocationStatus] = useState('checking');
   const [locationCount, setLocationCount] = useState(0);
+  const [currentView, setCurrentView] = useState('home'); // 'home' or 'map'
   const [locationTrackingDetails, setLocationTrackingDetails] = useState({
     isTracking: false,
     isTaskRegistered: false,
@@ -566,6 +568,27 @@ function MainApp() {
 
   if (!isAuthenticated) {
     return <AuthScreens />;
+  }
+
+  // Render different views based on currentView state
+  if (currentView === 'map') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+        {/* Navigation Header */}
+        <View style={styles.navHeader}>
+          <Button
+            variant="outline"
+            onPress={() => setCurrentView('home')}
+            style={styles.backButton}
+          >
+            ← Back to Home
+          </Button>
+          <Text style={styles.navTitle}>Timeline Map</Text>
+        </View>
+        <TimelineMapView />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -777,6 +800,14 @@ function MainApp() {
             }}
           >
             📍 Get Current Location
+          </Button>
+
+          <Button
+            variant="primary"
+            style={styles.actionButton}
+            onPress={() => setCurrentView('map')}
+          >
+            🗺️ View Timeline Map
           </Button>
 
           <Button
@@ -1010,6 +1041,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     color: '#9ca3af',
+  },
+  navHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  navTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
   },
 });
 
