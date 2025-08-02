@@ -1,9 +1,45 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import LoggingService from './services/LoggingService';
 
 const AuthContext = createContext();
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://haps.app');
+
+// Add network connectivity test
+const testApiConnectivity = async () => {
+  try {
+    LoggingService.info('Testing API connectivity', {
+      event_type: 'connectivity',
+      action: 'test_start',
+      api_url: API_URL
+    });
+
+    const response = await fetch(`${API_URL}/api/health`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      timeout: 10000
+    });
+
+    LoggingService.info('API connectivity test result', {
+      event_type: 'connectivity',
+      action: 'test_result',
+      status: response.status,
+      api_url: API_URL,
+      success: response.ok
+    });
+
+    return response.ok;
+  } catch (error) {
+    LoggingService.error('API connectivity test failed', error, {
+      event_type: 'connectivity',
+      action: 'test_failed',
+      api_url: API_URL,
+      error_message: error.message
+    });
+    return false;
+  }
+};
 
 // Global auth token cache for background tasks
 // This prevents SecureStore access issues in background contexts
@@ -74,6 +110,22 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      LoggingService.info('Login attempt started', {
+        event_type: 'authentication',
+        action: 'login_attempt',
+        email: email,
+        api_url: API_URL
+      });
+
+      // Test API connectivity first
+      const isConnected = await testApiConnectivity();
+      if (!isConnected) {
+        return { 
+          success: false, 
+          error: `Cannot connect to server at ${API_URL}. Please check your internet connection.` 
+        };
+      }
+
       const response = await fetch(`${API_URL}/api/sessions`, {
         method: 'POST',
         headers: {
@@ -86,6 +138,14 @@ export const AuthProvider = ({ children }) => {
             password,
           },
         }),
+      });
+
+      LoggingService.info('Login API response received', {
+        event_type: 'authentication',
+        action: 'api_response',
+        status: response.status,
+        status_text: response.statusText,
+        api_url: API_URL
       });
 
       const data = await response.json();
@@ -101,13 +161,36 @@ export const AuthProvider = ({ children }) => {
         // Update the cached token for background tasks
         updateCachedAuthToken(data.token);
 
+        LoggingService.info('Login successful', {
+          event_type: 'authentication',
+          action: 'login_success',
+          user_id: data.user?.id,
+          email: data.user?.email
+        });
+
         return { success: true };
       } else {
+        LoggingService.warn('Login failed', {
+          event_type: 'authentication',
+          action: 'login_failed',
+          status: response.status,
+          error: data.error || 'Login failed',
+          response_data: data
+        });
+
         return { success: false, error: data.error || 'Login failed' };
       }
     } catch (error) {
+      LoggingService.error('Login network error', error, {
+        event_type: 'authentication',
+        action: 'login_error',
+        email: email,
+        api_url: API_URL,
+        error_message: error.message
+      });
+
       console.error('Login error:', error);
-      return { success: false, error: 'Network error' };
+      return { success: false, error: `Network error: ${error.message}` };
     }
   };
 
