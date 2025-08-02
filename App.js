@@ -5,6 +5,8 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 
 import LocationService from './services/LocationService';
+import LocationSyncService from './services/LocationSyncService';
+import LoggingService from './services/LoggingService';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -268,24 +270,77 @@ async function restartLocationTracking() {
 
 // Authentication is handled in the sync service, no need for separate auth update
 
-// Get current device location manually (for testing)
+// Get current device location manually and send to backend
 async function getCurrentLocationManually() {
   try {
+    LoggingService.info('Manual location request started', {
+      event_type: 'manual_location',
+      action: 'request_started'
+    });
+
     const location = await LocationService.getCurrentLocation();
 
     console.log('Manual location retrieved:', location);
+    
+    // Log location details to Better Stack
+    LoggingService.location('manual_location_retrieved', {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      accuracy: location.coords.accuracy,
+      speed: location.coords.speed,
+      altitude: location.coords.altitude,
+      timestamp: location.timestamp,
+      manual_request: true
+    });
+
+    // Send location immediately to backend
+    try {
+      LoggingService.info('Sending manual location to backend', {
+        event_type: 'backend_sync',
+        action: 'manual_sync_started'
+      });
+
+      await LocationSyncService.syncNow('manual_location_request');
+      
+      LoggingService.sync('manual_sync_success', {
+        trigger: 'manual_location_button',
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy
+      });
+
+      console.log('✅ Manual location sent to backend successfully');
+
+    } catch (syncError) {
+      LoggingService.error('Failed to sync manual location to backend', syncError, {
+        event_type: 'backend_sync',
+        action: 'manual_sync_failed',
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      });
+      
+      // Don't throw here, we still want to return the location
+      console.error('❌ Failed to sync manual location to backend:', syncError);
+    }
+
     Sentry.addBreadcrumb({
-      message: 'Manual location retrieved',
+      message: 'Manual location retrieved and synced',
       level: 'info',
       data: {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy
+        accuracy: location.coords.accuracy,
+        backend_sync_attempted: true
       }
     });
 
     return location;
   } catch (error) {
+    LoggingService.error('Failed to get current location', error, {
+      event_type: 'manual_location',
+      action: 'request_failed'
+    });
+
     console.error('Failed to get current location:', error);
     Sentry.captureException(error, {
       tags: {
@@ -646,11 +701,48 @@ function MainApp() {
             style={styles.actionButton}
             onPress={async () => {
               console.log('Manual location update triggered');
-              const location = await getCurrentLocationManually();
-              if (location) {
-                // Update tracking status after manual location
-                const trackingStatus = await getLocationTrackingStatus();
-                setLocationTrackingDetails(trackingStatus);
+              try {
+                // Show immediate feedback
+                LoggingService.info('Get Current Location button pressed', {
+                  event_type: 'user_interaction',
+                  button: 'get_current_location'
+                });
+
+                const location = await getCurrentLocationManually();
+                if (location) {
+                  // Show success feedback
+                  sendDebugNotification(
+                    '📍 Location Retrieved & Sent',
+                    `Lat: ${location.coords.latitude.toFixed(6)}, Lng: ${location.coords.longitude.toFixed(6)}\nAccuracy: ${location.coords.accuracy}m\n✅ Sent to backend successfully`,
+                    {
+                      type: 'manual_location_success',
+                      latitude: location.coords.latitude,
+                      longitude: location.coords.longitude,
+                      accuracy: location.coords.accuracy,
+                      backend_synced: true
+                    }
+                  );
+
+                  // Update tracking status after manual location
+                  const trackingStatus = await getLocationTrackingStatus();
+                  setLocationTrackingDetails(trackingStatus);
+                }
+              } catch (error) {
+                // Show error feedback
+                LoggingService.error('Get Current Location button failed', error, {
+                  event_type: 'user_interaction',
+                  button: 'get_current_location',
+                  error_message: error.message
+                });
+
+                sendDebugNotification(
+                  '❌ Location Request Failed',
+                  `Failed to get location: ${error.message}`,
+                  {
+                    type: 'manual_location_error',
+                    error: error.message
+                  }
+                );
               }
             }}
           >
