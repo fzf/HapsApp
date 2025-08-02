@@ -1,20 +1,23 @@
 {
   "cli": {
-    "version": ">= 5.2.0"
+    "version": ">= 5.2.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://haps.app"
+        "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_LOGTAIL_TOKEN": "JEii3scJ5H39FyQAF7cbT6SE"
       }
     },
     "local-dev": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://haps.app"
+        "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_LOGTAIL_TOKEN": "JEii3scJ5H39FyQAF7cbT6SE"
       },
       "ios": {
         "simulator": false
@@ -23,7 +26,13 @@
     "preview": {
       "distribution": "internal"
     },
-    "production": {}
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_LOGTAIL_TOKEN": "JEii3scJ5H39FyQAF7cbT6SE"
+      }
+    }
   },
   "submit": {
     "production": {

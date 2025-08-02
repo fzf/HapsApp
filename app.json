@@ -28,8 +28,7 @@
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
           "background-location-task",
-          "com.transistorsoft.fetch",
-          "com.transistorsoft.customtask"
+          "background-sync-task"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -58,22 +57,12 @@
     },
         "plugins": [
       [
-        "react-native-background-geolocation",
-        {
-          "license": "",
-          "locationAuthorizationRequest": "Always",
-          "backgroundLocationIndicator": false,
-          "enableBackgroundLocationUpdates": true
-        }
-      ],
-      [
         "expo-gradle-ext-vars",
         {
           "googlePlayServicesLocationVersion": "21.1.0",
           "appCompatVersion": "1.4.2"
         }
       ],
-      "react-native-background-fetch",
       [
         "@sentry/react-native/expo",
         {
@@ -82,7 +71,9 @@
           "organization": "haps"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-background-task"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

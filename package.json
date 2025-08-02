@@ -20,6 +20,7 @@
     "build:android": "npm run prebuild && ./scripts/build-and-submit.sh --platform android --auto-submit"
   },
   "dependencies": {
+    "@logtail/js": "^0.5.5",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@sentry/react-native": "~6.14.0",
     "expo": "53.0.20",
@@ -29,9 +30,10 @@
     "expo-device": "~7.1.4",
     "expo-gradle-ext-vars": "^0.1.3",
     "expo-location": "~18.1.6",
+    "expo-network": "^7.1.5",
     "expo-notifications": "~0.31.4",
     "expo-secure-store": "~14.2.3",
-    "expo-sqlite": "^15.2.14",
+    "expo-sqlite": "~15.2.14",
     "expo-status-bar": "~2.2.3",
     "expo-task-manager": "~13.1.6",
     "expo-updates": "~0.28.17",
@@ -39,8 +41,6 @@
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-background-fetch": "^4.2.8",
-    "react-native-background-geolocation": "^4.18.9",
-    "react-native-date-picker": "^5.0.13",
     "react-native-maps": "^1.24.13"
   },
   "devDependencies": {

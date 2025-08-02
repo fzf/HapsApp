@@ -4,7 +4,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 
-import BackgroundGeolocation from 'react-native-background-geolocation';
+import LocationService from './services/LocationService';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -23,7 +23,7 @@ async function sendDebugNotification(title, body, data = {}) {
         data: {
           ...data,
           timestamp: new Date().toISOString(),
-          source: 'background_location_debug'
+          source: 'expo_location_debug'
         },
         sound: 'default'
       },
@@ -41,16 +41,16 @@ function toggleDebugNotifications(enabled) {
   console.log('[DEBUG] Location debug notifications:', enabled ? 'ENABLED' : 'DISABLED');
 }
 
-// Background Geolocation event handlers
-function onLocationReceived(location) {
-  console.log('[BackgroundGeolocation] Location received:', location);
+// Location service event handlers for debug notifications
+function onLocationUpdate(location) {
+  console.log('[LocationService] Location received:', location);
 
   // Send debug notification
   sendDebugNotification(
     `📍 Location Update`,
     `Coords: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}\nAccuracy: ${location.coords.accuracy}m\nSpeed: ${location.coords.speed || 0} m/s`,
     {
-      type: 'bg_geolocation_update',
+      type: 'expo_location_update',
       coords: `${location.coords.latitude}, ${location.coords.longitude}`,
       accuracy: location.coords.accuracy,
       speed: location.coords.speed
@@ -58,7 +58,7 @@ function onLocationReceived(location) {
   );
 
   Sentry.addBreadcrumb({
-    message: 'Background geolocation update received',
+    message: 'Expo location update received',
     level: 'info',
     data: {
       latitude: location.coords.latitude,
@@ -69,250 +69,30 @@ function onLocationReceived(location) {
   });
 }
 
-function onLocationError(error) {
-  console.error('[BackgroundGeolocation] Location error:', error);
-
-  sendDebugNotification(
-    '❌ Location Error',
-    `Error: ${error.message || 'Unknown location error'}`,
-    {
-      type: 'bg_geolocation_error',
-      error: error.message
-    }
-  );
-
-  Sentry.captureException(error, {
-    tags: {
-      section: 'background_geolocation',
-      error_type: 'location_error'
-    }
-  });
-}
-
-function onHttpResponse(response) {
-  console.log('[BackgroundGeolocation] HTTP Response:', response);
-
-  if (response.status >= 200 && response.status < 300) {
+// Sync status monitoring for debug notifications
+function onSyncUpdate(syncResult) {
+  if (syncResult.totalSynced > 0) {
     sendDebugNotification(
-      '✅ Location Uploaded',
-      `HTTP ${response.status}: Successfully uploaded location data`,
+      '✅ Data Synced',
+      `Synced ${syncResult.totalSynced} items to server`,
       {
-        type: 'bg_geolocation_upload_success',
-        status: response.status,
-        responseText: response.responseText
+        type: 'sync_success',
+        totalSynced: syncResult.totalSynced,
+        reason: syncResult.reason
       }
     );
-  } else {
-    const error = new Error(`HTTP ${response.status}: Failed to upload location data`);
-    error.response = response;
+  }
 
+  if (!syncResult.success && syncResult.reason !== 'sync_in_progress') {
     sendDebugNotification(
-      '❌ Upload Failed',
-      `HTTP ${response.status}: ${response.responseText || 'Failed to upload location data'}`,
+      '❌ Sync Failed',
+      `Sync failed: ${syncResult.reason}`,
       {
-        type: 'bg_geolocation_upload_error',
-        status: response.status,
-        responseText: response.responseText
+        type: 'sync_error',
+        reason: syncResult.reason
       }
     );
-
-    Sentry.captureException(error, {
-      tags: {
-        section: 'background_geolocation',
-        error_type: 'http_error'
-      },
-      extra: {
-        status: response.status,
-        responseText: response.responseText,
-        response: JSON.stringify(response)
-      }
-    });
   }
-
-  Sentry.addBreadcrumb({
-    message: `Background geolocation HTTP response: ${response.status}`,
-    level: response.status >= 200 && response.status < 300 ? 'info' : 'error',
-    data: {
-      status: response.status,
-      responseText: response.responseText,
-      response: JSON.stringify(response)
-    }
-  });
-}
-
-// State tracking for heartbeat monitoring
-let heartbeatCount = 0;
-
-async function onHeartbeat(params) {
-  console.log('[BackgroundGeolocation] Heartbeat:', params);
-  heartbeatCount++;
-
-  const timestamp = new Date().toISOString();
-  const isMoving = params.location && params.location.coords.speed > 0.5; // > 0.5 m/s considered moving
-
-  // Enhanced heartbeat data collection based on documentation
-  const heartbeatInfo = {
-    timestamp: timestamp,
-    heartbeatCount: heartbeatCount,
-    isMoving: isMoving,
-    batteryLevel: params.battery?.level,
-    batteryCharging: params.battery?.is_charging,
-    deviceId: params.deviceId,
-    // Enhanced location data if available
-    location: params.location ? {
-      latitude: params.location.coords.latitude,
-      longitude: params.location.coords.longitude,
-      accuracy: params.location.coords.accuracy,
-      speed: params.location.coords.speed,
-      heading: params.location.coords.heading,
-      altitude: params.location.coords.altitude,
-      timestamp: params.location.timestamp,
-      age: Date.now() - new Date(params.location.timestamp).getTime(), // Age of location in ms
-      mock: params.location.mock || false,
-      activity: params.location.activity
-    } : null,
-    // Additional system state information
-    enabled: params.enabled,
-    scheduleEnabled: params.scheduleEnabled,
-    trackingMode: params.trackingMode,
-    odometer: params.odometer
-  };
-
-  // Enhanced debug notification with more details
-  const batteryStatus = params.battery?.level ?
-    `${Math.round(params.battery.level * 100)}%${params.battery.is_charging ? ' (charging)' : ''}` :
-    'unknown';
-
-  const locationAge = params.location ?
-    Math.round((Date.now() - new Date(params.location.timestamp).getTime()) / 1000) :
-    null;
-
-  sendDebugNotification(
-    '💓 Heartbeat',
-    `${new Date().toLocaleTimeString()} (#${heartbeatCount}) - Status: ${isMoving ? '🚶 moving' : '🛑 stationary'}\nBattery: ${batteryStatus}\nOdometer: ${params.odometer ? Math.round(params.odometer) + 'm' : 'N/A'}${locationAge !== null ? `\nLocation age: ${locationAge}s` : ''}`,
-    {
-      type: 'bg_geolocation_heartbeat',
-      ...heartbeatInfo
-    }
-  );
-
-  // Send heartbeat data to backend with enhanced error handling
-  try {
-    const authToken = await getAuthTokenForBackgroundTask();
-    if (!authToken) {
-      console.warn('[BackgroundGeolocation] No auth token available for heartbeat');
-      Sentry.captureMessage('Heartbeat skipped: No auth token', {
-        level: 'warning',
-        tags: { section: 'background_geolocation', error_type: 'missing_auth_token' }
-      });
-      return;
-    }
-
-    if (!process.env.EXPO_PUBLIC_API_URL) {
-      console.warn('[BackgroundGeolocation] No API URL configured for heartbeat');
-      return;
-    }
-
-    const heartbeatData = {
-      type: 'heartbeat',
-      source: 'background_geolocation_heartbeat',
-      device_info: {
-        device_id: params.deviceId,
-        platform: Platform.OS,
-        app_version: Constants.expoConfig?.version || 'unknown'
-      },
-      tracking_state: {
-        enabled: params.enabled,
-        schedule_enabled: params.scheduleEnabled,
-        tracking_mode: params.trackingMode,
-        odometer: params.odometer
-      },
-      ...heartbeatInfo
-    };
-
-    const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/users/locations`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`
-      },
-      body: JSON.stringify(heartbeatData),
-      // Add timeout for heartbeat requests
-      signal: AbortSignal.timeout(10000) // 10 second timeout
-    });
-
-    if (response.ok) {
-      console.log('[BackgroundGeolocation] Heartbeat sent to backend successfully');
-
-      // Send success notification only in debug mode and occasionally
-      if (__DEV__ && Math.random() < 0.1) { // 10% chance to avoid spam
-        sendDebugNotification(
-          '✅ Heartbeat Sync',
-          'Successfully sent heartbeat to server',
-          { type: 'heartbeat_sync_success', status: response.status }
-        );
-      }
-    } else {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.warn('[BackgroundGeolocation] Failed to send heartbeat to backend:', response.status, errorText);
-
-      // Capture detailed error information
-      Sentry.captureException(new Error(`Heartbeat upload failed: HTTP ${response.status}`), {
-        tags: {
-          section: 'background_geolocation',
-          error_type: 'heartbeat_upload_error'
-        },
-        extra: {
-          status: response.status,
-          responseText: errorText,
-          heartbeatData: JSON.stringify(heartbeatData)
-        }
-      });
-    }
-  } catch (error) {
-    console.error('[BackgroundGeolocation] Error sending heartbeat to backend:', error);
-
-    // Enhanced error categorization
-    let errorType = 'heartbeat_unknown_error';
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      errorType = 'heartbeat_timeout_error';
-    } else if (error.message?.includes('Network')) {
-      errorType = 'heartbeat_network_error';
-    }
-
-    Sentry.captureException(error, {
-      tags: {
-        section: 'background_geolocation',
-        error_type: errorType
-      },
-      extra: {
-        heartbeatInfo: JSON.stringify(heartbeatInfo)
-      }
-    });
-
-    // Send error notification in debug mode
-    if (__DEV__) {
-      sendDebugNotification(
-        '❌ Heartbeat Error',
-        `Failed to send heartbeat: ${error.message}`,
-        { type: 'heartbeat_error', error: error.message }
-      );
-    }
-  }
-
-  // Enhanced Sentry breadcrumb with more context
-  Sentry.addBreadcrumb({
-    message: 'Background geolocation heartbeat',
-    level: 'info',
-    data: {
-      ...heartbeatInfo,
-      heartbeatInterval: 300, // Fixed 5 minute interval
-      trackingEnabled: params.enabled,
-      hasValidLocation: !!params.location && locationAge < 300, // Location is less than 5 minutes old
-      batteryOptimized: params.battery?.level > 0.2 // Above 20% battery
-    }
-  });
 }
 
 // NativeWind styles are handled by babel plugin
@@ -322,7 +102,6 @@ import { Card, CardHeader, CardTitle, CardContent } from './components/Card';
 import { Button } from './components/Button';
 import { Badge } from './components/Badge';
 import { BuildInfo, BuildInfoFooter } from './components/BuildInfo';
-import TimelineMapView from './components/TimelineMapView';
 
 // Import authentication components
 import { AuthProvider, useAuth, getAuthTokenForBackgroundTask, updateCachedAuthToken, clearCachedAuthToken } from './AuthContext';
@@ -434,16 +213,15 @@ function calculateAverageAccuracy(locations) {
     Math.round(accuracies.reduce((sum, acc) => sum + acc, 0) / accuracies.length) : null;
 }
 
-// Check if background location is actively running
+// Check if location tracking is actively running
 async function getLocationTrackingStatus() {
   try {
-    const state = await BackgroundGeolocation.getState();
-
+    const status = await LocationService.getServiceStatus();
     return {
-      isTracking: state.enabled,
-      isTaskRegistered: state.enabled,
-      hasBackgroundPermission: state.trackingMode === 1, // 1 = Always
-      permissionStatus: state.trackingMode === 1 ? 'granted' : 'denied'
+      isTracking: status.isTracking,
+      isTaskRegistered: status.isTaskRegistered,
+      hasBackgroundPermission: status.permissionsGranted,
+      permissionStatus: status.permissionsGranted ? 'granted' : 'denied'
     };
   } catch (error) {
     console.error('Failed to get location tracking status:', error);
@@ -456,14 +234,14 @@ async function getLocationTrackingStatus() {
   }
 }
 
-// Stop background location tracking
+// Stop location tracking
 async function stopLocationTracking() {
   try {
-    await BackgroundGeolocation.stop();
-    console.log('Background location tracking stopped');
+    await LocationService.stopTracking();
+    console.log('Location tracking stopped');
 
     Sentry.addBreadcrumb({
-      message: 'Background location tracking stopped',
+      message: 'Location tracking stopped',
       level: 'info'
     });
   } catch (error) {
@@ -481,48 +259,19 @@ async function stopLocationTracking() {
 async function restartLocationTracking() {
   try {
     await stopLocationTracking();
-    await requestLocationPermissions();
+    await startLocationTracking();
     console.log('Location tracking restarted');
   } catch (error) {
     console.error('Failed to restart location tracking:', error);
   }
 }
 
-// Update authentication headers for background geolocation
-async function updateBackgroundGeolocationAuth(authToken) {
-  try {
-    if (authToken) {
-      await BackgroundGeolocation.setConfig({
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': authToken
-        }
-      });
-      console.log('✅ Background geolocation auth headers updated');
-    } else {
-      await BackgroundGeolocation.setConfig({
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-      console.log('⚠️ Background geolocation auth headers cleared');
-    }
-  } catch (error) {
-    console.error('Failed to update background geolocation auth:', error);
-  }
-}
+// Authentication is handled in the sync service, no need for separate auth update
 
 // Get current device location manually (for testing)
 async function getCurrentLocationManually() {
   try {
-    const location = await BackgroundGeolocation.getCurrentPosition({
-      timeout: 15000, // 15 second timeout
-      maximumAge: 1000, // Use location up to 1 second old
-      desiredAccuracy: 10, // 10 meter accuracy
-      samples: 1
-    });
+    const location = await LocationService.getCurrentLocation();
 
     console.log('Manual location retrieved:', location);
     Sentry.addBreadcrumb({
@@ -544,110 +293,35 @@ async function getCurrentLocationManually() {
         error_type: 'manual_location_error'
       }
     });
+    throw error;
   }
 }
 
-async function requestLocationPermissions() {
+async function startLocationTracking() {
   try {
-    // Get auth token for background requests
-    const authToken = await getAuthTokenForBackgroundTask();
-    if (!authToken) {
-      console.error('No auth token available for background location tracking');
-      Sentry.captureMessage('Background location setup failed: No auth token', {
-        level: 'error',
-        tags: { section: 'background_geolocation', error_type: 'missing_auth_token' }
+    const success = await LocationService.startTracking();
+    if (success) {
+      console.log('✅ Expo Location service started successfully');
+      Sentry.addBreadcrumb({
+        message: 'Location tracking started with Expo Location',
+        level: 'info'
       });
-      return;
+    } else {
+      throw new Error('Failed to start location tracking');
     }
-
-    // Configure react-native-background-geolocation with battery-optimized settings
-    await BackgroundGeolocation.ready({
-            // Geolocation Config (aggressive tracking parameters)
-      desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-      distanceFilter: 10, // 10 meters (as requested)
-
-      // Activity Recognition
-      stopTimeout: 1, // 1 minute stationary before stopping (more aggressive)
-
-      // Application config
-      debug: __DEV__, // Enable debug sounds and notifications in dev
-      logLevel: BackgroundGeolocation.LOG_LEVEL_OFF,
-      stopOnTerminate: false,   // Continue tracking when app is terminated
-      startOnBoot: true,        // Start tracking when device boots
-
-      // HTTP / SQLite config
-      url: process.env.EXPO_PUBLIC_API_URL + '/users/locations',
-      batchSync: true,        // Batch locations for efficiency (better for 30s tracking)
-      autoSync: true,         // Automatically post locations
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`  // Add auth token for server authentication
-      },
-      params: {
-        format: 'json',
-        source: 'background_geolocation'
-      },
-
-      // Motion activity tracking (aggressive settings)
-      preventSuspend: true,  // Prevent iOS suspend for consistent tracking
-      disableMotionActivityUpdates: false,
-
-      // Geofencing
-      geofenceProximityRadius: 30, // 30 meters (reduced from 1000m)
-
-      // iOS specific (aggressive settings)
-      pausesLocationUpdatesAutomatically: false, // Don't let iOS pause (as requested)
-      locationAuthorizationRequest: 'Always',
-
-      // Authorization
-      authorization: {
-        strategy: BackgroundGeolocation.AUTHORIZATION_STRATEGY_ALWAYS,
-        request: BackgroundGeolocation.AUTHORIZATION_REQUEST_ALWAYS
-      },
-
-      // Heartbeat interval
-      heartbeatInterval: 300 // 5 minutes in seconds (300s = 5min)
-    });
-
-    // Add location listener
-    BackgroundGeolocation.onLocation(onLocationReceived, onLocationError);
-
-    // Add http listener for debugging
-    BackgroundGeolocation.onHttp(onHttpResponse);
-
-    // Add heartbeat listener for monitoring background health
-    BackgroundGeolocation.onHeartbeat(onHeartbeat);
-
-    // Start tracking
-    await BackgroundGeolocation.start();
-
-    console.log('✅ react-native-background-geolocation configured and started');
-
-    console.log('Background location tracking started with aggressive settings');
-    Sentry.addBreadcrumb({
-      message: 'Background location tracking configured with aggressive parameters',
-      level: 'info',
-      data: {
-        desiredAccuracy: 'HIGH',
-        distanceFilter: 10,
-        geofenceProximityRadius: 30
-      }
-    });
-
   } catch (error) {
-    console.error('Failed to configure background geolocation:', error);
+    console.error('Failed to start location tracking:', error);
     Sentry.captureException(error, {
       tags: {
         section: 'location_tracking',
-        error_type: 'configuration_error'
+        error_type: 'start_error'
       }
     });
+    throw error;
   }
 }
 
-// Note: TaskManager.defineTask(LOCATION_TASK_NAME) removed -
-// react-native-background-geolocation handles location tracking natively
+// Location tracking is now handled by LocationService using Expo Location
 
 
 
@@ -656,7 +330,6 @@ function MainApp() {
   const [notification, setNotification] = useState(undefined);
   const [locationStatus, setLocationStatus] = useState('checking');
   const [locationCount, setLocationCount] = useState(0);
-  const [currentView, setCurrentView] = useState('home'); // 'home' or 'map'
   const [locationTrackingDetails, setLocationTrackingDetails] = useState({
     isTracking: false,
     isTaskRegistered: false,
@@ -695,17 +368,15 @@ function MainApp() {
   useEffect(() => {
     if (token) {
       updateCachedAuthToken(token);
-      updateBackgroundGeolocationAuth(token);
     } else {
       clearCachedAuthToken();
-      updateBackgroundGeolocationAuth(null);
     }
   }, [token]);
 
   useEffect(() => {
     const initializeLocationTracking = async () => {
       try {
-        await requestLocationPermissions();
+        await startLocationTracking();
         setLocationStatus('active');
 
         // Get detailed tracking status
@@ -717,7 +388,9 @@ function MainApp() {
       }
     };
 
-    initializeLocationTracking();
+    if (user) {
+      initializeLocationTracking();
+    }
 
     // Set user context for Sentry with location tracking info
     Sentry.setUser({
@@ -765,26 +438,6 @@ function MainApp() {
     return <AuthScreens />;
   }
 
-  // Render different views based on currentView state
-  if (currentView === 'map') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
-        {/* Navigation Header */}
-        <View style={styles.navHeader}>
-          <Button
-            variant="outline"
-            onPress={() => setCurrentView('home')}
-            style={styles.backButton}
-          >
-            ← Back to Home
-          </Button>
-          <Text style={styles.navTitle}>Timeline Map</Text>
-        </View>
-        <TimelineMapView />
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -795,7 +448,14 @@ function MainApp() {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.headerText}>
-              <Text style={styles.title}>Haps Tracker</Text>
+              <Text style={styles.title}>
+                Haps Tracker
+                {Constants.expoConfig?.extra?.buildProfile !== 'production' && (
+                  <Text style={styles.environmentBadge}>
+                    {' '}({Constants.expoConfig?.extra?.buildProfile || 'dev'})
+                  </Text>
+                )}
+              </Text>
               <Text style={styles.subtitle}>Welcome, {user?.email}</Text>
             </View>
             <Button
@@ -997,13 +657,6 @@ function MainApp() {
             📍 Get Current Location
           </Button>
 
-          <Button
-            variant="primary"
-            style={styles.actionButton}
-            onPress={() => setCurrentView('map')}
-          >
-            🗺️ View Timeline Map
-          </Button>
 
           <Button
             variant="secondary"
@@ -1237,22 +890,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9ca3af',
   },
-  navHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  navTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
+  environmentBadge: {
+    fontSize: 12,
+    color: '#4b5563',
+    backgroundColor: '#e5e7eb',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 4,
   },
 });
 
