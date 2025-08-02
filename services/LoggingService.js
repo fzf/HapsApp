@@ -1,28 +1,28 @@
-import { Logtail } from '@logtail/js';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 class LoggingService {
   constructor() {
-    // Initialize Logtail with your Better Stack source token
-    this.logtail = null;
+    this.sourceToken = null;
     this.isEnabled = false;
-    this.initializeLogtail();
+    this.logtailUrl = 'https://in.logs.betterstack.com';
+    this.initializeLogging();
   }
 
-  initializeLogtail() {
+  initializeLogging() {
     try {
       // Get token from environment or config
-      const sourceToken = process.env.EXPO_PUBLIC_LOGTAIL_TOKEN;
+      this.sourceToken = Constants.expoConfig?.extra?.EXPO_PUBLIC_LOGTAIL_TOKEN || 
+                        process.env.EXPO_PUBLIC_LOGTAIL_TOKEN;
       
-      if (sourceToken) {
-        this.logtail = new Logtail(sourceToken);
+      if (this.sourceToken) {
         this.isEnabled = true;
-        console.log('✅ Logtail logging service initialized');
+        console.log('✅ Better Stack logging service initialized');
       } else {
         console.warn('⚠️ EXPO_PUBLIC_LOGTAIL_TOKEN not found, logging disabled');
       }
     } catch (error) {
-      console.error('❌ Failed to initialize Logtail:', error);
+      console.error('❌ Failed to initialize logging service:', error);
     }
   }
 
@@ -36,50 +36,59 @@ class LoggingService {
     };
   }
 
-  info(message, data = {}) {
-    console.log(`[INFO] ${message}`, data);
-    
-    if (this.isEnabled && this.logtail) {
-      this.logtail.info(message, {
+  async sendToLogtail(level, message, data = {}) {
+    if (!this.isEnabled || !this.sourceToken) {
+      return;
+    }
+
+    try {
+      const logData = {
+        dt: new Date().toISOString(),
+        level,
+        message,
         ...this.getBaseContext(),
         ...data
+      };
+
+      await fetch(this.logtailUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.sourceToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(logData),
       });
+    } catch (error) {
+      // Don't console.error here to avoid infinite loops
+      console.warn('Failed to send log to Better Stack:', error.message);
     }
+  }
+
+  info(message, data = {}) {
+    console.log(`[INFO] ${message}`, data);
+    this.sendToLogtail('info', message, data);
   }
 
   debug(message, data = {}) {
     console.log(`[DEBUG] ${message}`, data);
-    
-    if (this.isEnabled && this.logtail) {
-      this.logtail.debug(message, {
-        ...this.getBaseContext(),
-        ...data
-      });
-    }
+    this.sendToLogtail('debug', message, data);
   }
 
   warn(message, data = {}) {
     console.warn(`[WARN] ${message}`, data);
-    
-    if (this.isEnabled && this.logtail) {
-      this.logtail.warn(message, {
-        ...this.getBaseContext(),
-        ...data
-      });
-    }
+    this.sendToLogtail('warn', message, data);
   }
 
   error(message, error = null, data = {}) {
     console.error(`[ERROR] ${message}`, error, data);
     
-    if (this.isEnabled && this.logtail) {
-      this.logtail.error(message, {
-        ...this.getBaseContext(),
-        error: error?.message || error,
-        stack: error?.stack,
-        ...data
-      });
-    }
+    const errorData = {
+      ...data,
+      error: error?.message || error,
+      stack: error?.stack,
+    };
+    
+    this.sendToLogtail('error', message, errorData);
   }
 
   // Specific method for location logs
@@ -117,10 +126,11 @@ class LoggingService {
 
   // Flush logs (useful before app closes)
   async flush() {
-    if (this.isEnabled && this.logtail) {
+    if (this.isEnabled) {
       try {
-        await this.logtail.flush();
-        console.log('✅ Logs flushed to Logtail');
+        // Since we're using fetch, logs are sent immediately
+        // This method exists for API compatibility
+        console.log('✅ Logs are sent immediately via fetch API');
       } catch (error) {
         console.error('❌ Failed to flush logs:', error);
       }

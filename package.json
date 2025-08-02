@@ -20,7 +20,6 @@
     "build:android": "npm run prebuild && ./scripts/build-and-submit.sh --platform android --auto-submit"
   },
   "dependencies": {
-    "@logtail/js": "^0.5.5",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@sentry/react-native": "~6.14.0",
     "expo": "53.0.20",
