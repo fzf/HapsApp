@@ -53,7 +53,8 @@
     "extra": {
       "eas": {
         "projectId": "c8618cdd-705b-4a6d-8afa-4c89ce0ce85c"
-      }
+      },
+      "EXPO_PUBLIC_LOGTAIL_TOKEN": "JEii3scJ5H39FyQAF7cbT6SE"
     },
         "plugins": [
       [

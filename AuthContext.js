@@ -15,7 +15,7 @@ const testApiConnectivity = async () => {
       api_url: API_URL
     });
 
-    const response = await fetch(`${API_URL}/api/health`, {
+    const response = await fetch(`${API_URL}/up`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
       timeout: 10000
@@ -120,9 +120,9 @@ export const AuthProvider = ({ children }) => {
       // Test API connectivity first
       const isConnected = await testApiConnectivity();
       if (!isConnected) {
-        return { 
-          success: false, 
-          error: `Cannot connect to server at ${API_URL}. Please check your internet connection.` 
+        return {
+          success: false,
+          error: `Cannot connect to server at ${API_URL}. Please check your internet connection.`
         };
       }
 
@@ -141,14 +141,15 @@ export const AuthProvider = ({ children }) => {
       });
 
       LoggingService.info('Login API response received', {
-        event_type: 'authentication',
         action: 'api_response',
+        api_url: API_URL,
+        event_type: 'authentication',
         status: response.status,
         status_text: response.statusText,
-        api_url: API_URL
       });
 
       const data = await response.json();
+      console.log('Login response data received', data);
 
       if (response.ok && data.token) {
         await SecureStore.setItemAsync('authToken', data.token);
@@ -241,7 +242,7 @@ export const AuthProvider = ({ children }) => {
         await fetch(`${API_URL}/api/sessions`, {
           method: 'DELETE',
           headers: {
-            'Authorization': token,
+            'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
           },
         });
@@ -275,7 +276,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     const defaultHeaders = {
-      'Authorization': token,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };

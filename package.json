@@ -14,10 +14,10 @@
     "dev:android:prod": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && expo run:android",
     "release:ios": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && npx expo run:ios --device --configuration Release",
     "release:android": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && npx expo run:android --device --configuration Release",
-    "build:setup": "echo 'Please run this command directly in your terminal:' && echo 'eas credentials:configure-build -p ios --profile production' && echo '' && echo 'Or use:' && echo 'eas credentials -p ios'",
-    "build": "npm run prebuild && ./scripts/build-and-submit.sh --skip-credentials",
-    "build:submit": "npm run prebuild && ./scripts/build-and-submit.sh --auto-submit",
-    "build:android": "npm run prebuild && ./scripts/build-and-submit.sh --platform android --auto-submit"
+    "build": "./scripts/build-and-submit.sh --skip-credentials",
+    "build:submit": "./scripts/build-and-submit.sh --auto-submit",
+    "build:android": "./scripts/build-and-submit.sh --platform android --auto-submit",
+    "build:clean": "./scripts/build-and-submit.sh --force-clean"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.1.2",

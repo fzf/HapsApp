@@ -3,6 +3,21 @@ import { getAuthTokenForBackgroundTask } from '../AuthContext';
 import * as Sentry from '@sentry/react-native';
 import * as Network from 'expo-network';
 
+// React Native compatible timeout implementation
+const createAbortSignalWithTimeout = (timeoutMs) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+  
+  // Clean up timeout if request completes normally
+  const originalSignal = controller.signal;
+  const cleanup = () => clearTimeout(timeoutId);
+  originalSignal.addEventListener('abort', cleanup, { once: true });
+  
+  return controller.signal;
+};
+
 /**
  * LocationSyncService - Handles syncing cached location data to server
  * 
@@ -222,7 +237,7 @@ class LocationSyncService {
           'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify(batchData),
-        signal: AbortSignal.timeout(30000) // 30 second timeout
+        signal: createAbortSignalWithTimeout(30000) // 30 second timeout
       });
 
       if (response.ok) {
@@ -282,7 +297,7 @@ class LocationSyncService {
               'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify(heartbeatData),
-            signal: AbortSignal.timeout(10000) // 10 second timeout
+            signal: createAbortSignalWithTimeout(10000) // 10 second timeout
           });
 
           if (response.ok) {
