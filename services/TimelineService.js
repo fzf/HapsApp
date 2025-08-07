@@ -51,6 +51,32 @@ class TimelineService {
     }
   }
 
+  async fetchTimelineForDateRange(startDate, endDate, authToken) {
+    try {
+      const startDateString = startDate.toISOString().split('T')[0];
+      const endDateString = endDate.toISOString().split('T')[0];
+
+      const response = await fetch(`${this.API_URL}/api/timeline?start_date=${startDateString}&end_date=${endDateString}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Timeline API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Failed to fetch timeline range from API:', error);
+      throw error;
+    }
+  }
+
   async getTimelineForDate(date, authToken) {
     const dateString = date.toISOString().split('T')[0];
 

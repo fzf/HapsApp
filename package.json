@@ -7,13 +7,12 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "prebuild": "node scripts/generate-build-info.js",
-    "dev:ios": "npm run prebuild && expo run:ios",
-    "dev:android": "npm run prebuild && expo run:android",
-    "dev:ios:prod": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && expo run:ios",
-    "dev:android:prod": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && expo run:android",
-    "release:ios": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && npx expo run:ios --device --configuration Release",
-    "release:android": "EXPO_PUBLIC_API_URL=https://haps.app npm run prebuild && npx expo run:android --device --configuration Release",
+    "dev:ios": "expo run:ios",
+    "dev:android": "expo run:android",
+    "dev:ios:prod": "EXPO_PUBLIC_API_URL=https://haps.app expo run:ios",
+    "dev:android:prod": "EXPO_PUBLIC_API_URL=https://haps.app expo run:android",
+    "release:ios": "EXPO_PUBLIC_API_URL=https://haps.app npx expo run:ios --device --configuration Release",
+    "release:android": "EXPO_PUBLIC_API_URL=https://haps.app npx expo run:android --device --configuration Release",
     "build": "./scripts/build-and-submit.sh --skip-credentials",
     "build:submit": "./scripts/build-and-submit.sh --auto-submit",
     "build:android": "./scripts/build-and-submit.sh --platform android --auto-submit",
@@ -21,8 +20,11 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-navigation/bottom-tabs": "^7.4.5",
+    "@react-navigation/native": "^7.1.17",
+    "@react-navigation/native-stack": "^7.3.24",
     "@sentry/react-native": "~6.14.0",
-    "expo": "53.0.20",
+    "expo": "^53.0.20",
     "expo-background-task": "^0.2.8",
     "expo-constants": "~17.1.7",
     "expo-dev-client": "~5.2.4",
@@ -40,7 +42,9 @@
     "react": "19.0.0",
     "react-native": "0.79.5",
     "react-native-background-fetch": "^4.2.8",
-    "react-native-maps": "^1.24.13"
+    "react-native-maps": "1.20.1",
+    "react-native-safe-area-context": "^5.5.2",
+    "react-native-screens": "^4.13.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

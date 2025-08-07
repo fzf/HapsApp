@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import LoggingService from './services/LoggingService';
 
@@ -131,6 +132,8 @@ export const AuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'X-App-Signature': 'HapsApp-Production-v1.0',
+          'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
         },
         body: JSON.stringify({
           user: {
@@ -202,6 +205,8 @@ export const AuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'X-App-Signature': 'HapsApp-Production-v1.0',
+          'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
         },
         body: JSON.stringify({
           user: {
@@ -244,6 +249,8 @@ export const AuthProvider = ({ children }) => {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
+            'X-App-Signature': 'HapsApp-Production-v1.0',
+            'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
           },
         });
       }
@@ -279,6 +286,8 @@ export const AuthProvider = ({ children }) => {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-App-Signature': 'HapsApp-Production-v1.0',
+      'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
     };
 
     const mergedOptions = {

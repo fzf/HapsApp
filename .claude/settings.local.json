@@ -22,7 +22,16 @@
       "Bash(xcodebuild:*)",
       "Bash(/Users/fzf/Projects/HapsApp/scripts/build-and-submit.sh:*)",
       "Bash(npx expo run:ios:*)",
-      "Bash(npx expo:*)"
+      "Bash(npx expo:*)",
+      "Bash(npx eas build:*)",
+      "Bash(npx expo run:ios --configuration Release)",
+      "Bash(rm:*)",
+      "Bash(eas build:configure)",
+      "Bash(npx eas submit:*)",
+      "Bash(./build-local.sh:*)",
+      "Bash(EXPO_PUBLIC_API_URL=\"https://haps.app\" EXPO_PUBLIC_LOGTAIL_TOKEN=\"JEii3scJ5H39FyQAF7cbT6SE\" NODE_ENV=production npx expo run:ios --configuration Release --device --non-interactive)",
+      "Bash(CI=1 EXPO_PUBLIC_API_URL=\"https://haps.app\" EXPO_PUBLIC_LOGTAIL_TOKEN=\"JEii3scJ5H39FyQAF7cbT6SE\" NODE_ENV=production npx expo run:ios --configuration Release)",
+      "Bash(EXPO_PUBLIC_API_URL=\"https://haps.app\" EXPO_PUBLIC_LOGTAIL_TOKEN=\"JEii3scJ5H39FyQAF7cbT6SE\" NODE_ENV=production xcodebuild archive -workspace HapsApp.xcworkspace -scheme HapsApp -configuration Release -destination \"generic/platform=iOS\" -archivePath \"../build/HapsApp.xcarchive\" -allowProvisioningUpdates DEVELOPMENT_TEAM=A483478F88)"
     ],
     "deny": []
   }
