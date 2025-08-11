@@ -525,6 +525,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 60, // Space for bottom navigation tabs
   },
   header: {
     marginBottom: 24,

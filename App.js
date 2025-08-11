@@ -8,6 +8,8 @@ import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
 import HomeScreen from './components/HomeScreen';
 import MapViewScreen from './components/MapViewScreen';
+import TimelineListScreen from './components/TimelineListScreen';
+import HeartbeatDebugScreen from './components/HeartbeatDebugScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -38,8 +40,8 @@ function MainApp() {
             backgroundColor: '#FFFFFF',
             borderTopColor: '#E5E7EB',
             paddingTop: 8,
-            paddingBottom: 8,
-            height: 60,
+            paddingBottom: 34, // Extra padding for device safe area
+            height: 84, // Increased height to accommodate extra padding
           },
           headerShown: false,
         }}
@@ -59,6 +61,24 @@ function MainApp() {
           options={{
             tabBarIcon: ({ color, size }) => (
               <Text style={{ color, fontSize: size }}>🗺️</Text>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Timeline"
+          component={TimelineListScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ color, fontSize: size }}>📋</Text>
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Heartbeat"
+          component={HeartbeatDebugScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ color, fontSize: size }}>💓</Text>
             ),
           }}
         />

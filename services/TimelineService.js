@@ -27,10 +27,28 @@ class TimelineService {
 
       const data = await response.json();
 
-      // Save to local database
-      await TimelineDatabase.saveTimelineData(dateString, data);
+      // Handle new API format with combined timeline
+      if (data.timeline) {
+        // Convert combined timeline to separate visits and travels for backward compatibility
+        const visits = data.timeline.filter(item => item.type === 'visit');
+        const travels = data.timeline.filter(item => item.type === 'travel');
 
-      return data;
+        const convertedData = {
+          ...data,
+          visits: visits,
+          travels: travels
+        };
+
+        // Save to local database
+        await TimelineDatabase.saveTimelineData(dateString, convertedData);
+
+        return convertedData;
+      } else {
+        // Save to local database (old format)
+        await TimelineDatabase.saveTimelineData(dateString, data);
+
+        return data;
+      }
     } catch (error) {
       console.error('Failed to fetch timeline from API:', error);
 
@@ -70,7 +88,21 @@ class TimelineService {
       }
 
       const data = await response.json();
-      return data;
+
+      // Handle new API format with combined timeline
+      if (data.timeline) {
+        // Convert combined timeline to separate visits and travels for backward compatibility
+        const visits = data.timeline.filter(item => item.type === 'visit');
+        const travels = data.timeline.filter(item => item.type === 'travel');
+
+        return {
+          ...data,
+          visits: visits,
+          travels: travels
+        };
+      } else {
+        return data;
+      }
     } catch (error) {
       console.error('Failed to fetch timeline range from API:', error);
       throw error;
@@ -147,33 +179,84 @@ class TimelineService {
     return `${Math.round(meters)}m`;
   }
 
-  formatTime(isoString) {
+  isValidTimeZone(timezone) {
+    if (!timezone || typeof timezone !== 'string') {
+      return false;
+    }
+
+    try {
+      // Test if the timezone is valid by trying to use it
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+      return true;
+    } catch (error) {
+      console.warn('Invalid timezone:', timezone, error);
+      return false;
+    }
+  }
+
+  formatTime(isoString, timezone = null) {
     const date = new Date(isoString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const options = {
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    if (timezone && this.isValidTimeZone(timezone)) {
+      options.timeZone = timezone;
+    }
+    return date.toLocaleTimeString([], options);
+  }
+
+  formatDateTime(isoString, timezone = null) {
+    const date = new Date(isoString);
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    if (timezone && this.isValidTimeZone(timezone)) {
+      options.timeZone = timezone;
+    }
+    return date.toLocaleString([], options);
   }
 
   getTimelineBounds(timeline) {
     const allPoints = [];
 
-    // Add visit coordinates
-    timeline.visits.forEach(visit => {
-      if (visit.center_latitude && visit.center_longitude) {
-        allPoints.push({
-          latitude: visit.center_latitude,
-          longitude: visit.center_longitude
-        });
-      }
-    });
+    // Handle new combined timeline format or old separate format
+    if (timeline.timeline) {
+      // New format with combined timeline
+      timeline.timeline.forEach(item => {
+        if (item.center_latitude && item.center_longitude) {
+          allPoints.push({
+            latitude: item.center_latitude,
+            longitude: item.center_longitude
+          });
+        }
+      });
+    } else {
+      // Old format with separate visits and travels
+      // Add visit coordinates
+      timeline.visits.forEach(visit => {
+        if (visit.center_latitude && visit.center_longitude) {
+          allPoints.push({
+            latitude: visit.center_latitude,
+            longitude: visit.center_longitude
+          });
+        }
+      });
 
-    // Add travel coordinates
-    timeline.travels.forEach(travel => {
-      if (travel.center_latitude && travel.center_longitude) {
-        allPoints.push({
-          latitude: travel.center_latitude,
-          longitude: travel.center_longitude
-        });
-      }
-    });
+      // Add travel coordinates
+      timeline.travels.forEach(travel => {
+        if (travel.center_latitude && travel.center_longitude) {
+          allPoints.push({
+            latitude: travel.center_latitude,
+            longitude: travel.center_longitude
+          });
+        }
+      });
+    }
 
     if (allPoints.length === 0) {
       // Default to San Francisco if no data

@@ -4,6 +4,7 @@ import * as BackgroundTask from 'expo-background-task';
 import { Platform } from 'react-native';
 import LocationCacheService from './LocationCacheService';
 import LocationSyncService from './LocationSyncService';
+import HeartbeatService from './HeartbeatService';
 import LoggingService from './LoggingService';
 import * as Sentry from '@sentry/react-native';
 
@@ -284,8 +285,11 @@ class LocationService {
       // Start sync service
       LocationSyncService.startAutoSync(this.currentActivity);
 
-      // Start heartbeat monitoring
+      // Start heartbeat monitoring (legacy)
       this.startHeartbeatMonitoring();
+
+      // Start guaranteed heartbeat service (30-minute guarantee)
+      await HeartbeatService.startHeartbeat();
 
       this.isTracking = true;
       console.log('✅ Location tracking started');
@@ -317,6 +321,9 @@ class LocationService {
 
       LocationSyncService.stopAutoSync();
       this.stopHeartbeatMonitoring();
+
+      // Stop guaranteed heartbeat service
+      await HeartbeatService.stopHeartbeat();
 
       this.isTracking = false;
       console.log('⏹️ Location tracking stopped');
@@ -411,6 +418,7 @@ class LocationService {
     try {
       const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
       const syncStatus = await LocationSyncService.getSyncStatus();
+      const heartbeatStatus = await HeartbeatService.getStatus();
       
       return {
         isTracking: this.isTracking,
@@ -419,7 +427,8 @@ class LocationService {
         currentActivity: this.currentActivity,
         lastKnownLocation: this.lastKnownLocation,
         lastActivityTime: this.lastActivityTime,
-        syncStatus
+        syncStatus,
+        heartbeatStatus
       };
     } catch (error) {
       console.error('❌ Error getting service status:', error);
@@ -430,7 +439,8 @@ class LocationService {
         currentActivity: 'unknown',
         lastKnownLocation: null,
         lastActivityTime: null,
-        syncStatus: null
+        syncStatus: null,
+        heartbeatStatus: null
       };
     }
   }
