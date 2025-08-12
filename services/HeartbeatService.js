@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import * as BackgroundTask from 'expo-background-task';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LocationCacheService from './LocationCacheService';
 import LocationSyncService from './LocationSyncService';
@@ -14,12 +15,12 @@ const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * HeartbeatService - Guarantees location is sent every 30 minutes
- * 
+ *
  * This service ensures that regardless of activity state or other sync intervals,
  * the user's location is captured and sent to the server at least every 30 minutes.
  * This is critical for maintaining location continuity and detecting if the app
  * stops tracking properly.
- * 
+ *
  * Features:
  * - Guaranteed 30-minute interval regardless of user activity
  * - Background task execution using Expo TaskManager
@@ -39,10 +40,10 @@ class HeartbeatService {
     try {
       // Load last heartbeat time from storage
       await this.loadLastHeartbeatTime();
-      
+
       // Define the background heartbeat task
       this.defineHeartbeatTask();
-      
+
       console.log('✅ HeartbeatService initialized');
     } catch (error) {
       console.error('❌ Failed to initialize HeartbeatService:', error);
@@ -59,17 +60,19 @@ class HeartbeatService {
         Sentry.captureException(error, {
           tags: { section: 'heartbeat_service', error_type: 'background_task_error' }
         });
-        return;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
 
       try {
         console.log('💓 Heartbeat task executing...');
         await this.executeHeartbeat();
+        return BackgroundTask.BackgroundTaskResult.Success;
       } catch (taskError) {
         console.error('❌ Heartbeat task execution error:', taskError);
         Sentry.captureException(taskError, {
           tags: { section: 'heartbeat_service', error_type: 'task_execution_error' }
         });
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
     });
   }
@@ -104,10 +107,8 @@ class HeartbeatService {
 
     try {
       // Register the background task with 30-minute interval
-      await TaskManager.registerTaskAsync(HEARTBEAT_TASK_NAME, {
-        minimumInterval: HEARTBEAT_INTERVAL_MS / 60000, // Convert to minutes
-        stopOnTerminate: false,
-        startOnBoot: true,
+      await BackgroundTask.registerTaskAsync(HEARTBEAT_TASK_NAME, {
+        minimumInterval: Math.max(15, HEARTBEAT_INTERVAL_MS / 60000), // Convert to minutes, minimum 15 minutes
       });
 
       // Start immediate heartbeat timer as backup
@@ -136,8 +137,12 @@ class HeartbeatService {
 
   async stopHeartbeat() {
     try {
-      if (TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK_NAME)) {
-        await TaskManager.unregisterTaskAsync(HEARTBEAT_TASK_NAME);
+      // Try to unregister the task (will silently fail if not registered)
+      try {
+        await BackgroundTask.unregisterTaskAsync(HEARTBEAT_TASK_NAME);
+      } catch (unregisterError) {
+        // Ignore errors if task was not registered
+        console.log('📝 Background task was not registered or already unregistered');
       }
 
       this.stopHeartbeatTimer();
@@ -196,7 +201,7 @@ class HeartbeatService {
   async executeHeartbeat() {
     try {
       const now = Date.now();
-      
+
       console.log('💓 Executing guaranteed heartbeat...');
 
       // Check network connectivity
@@ -219,7 +224,7 @@ class HeartbeatService {
         console.log('📍 Got fresh location for heartbeat');
       } catch (locationError) {
         console.warn('⚠️ Could not get fresh location for heartbeat:', locationError);
-        
+
         // Try to get last known location
         try {
           location = await Location.getLastKnownPositionAsync({
@@ -307,11 +312,11 @@ class HeartbeatService {
 
     } catch (error) {
       console.error('❌ Failed to execute heartbeat:', error);
-      
+
       Sentry.captureException(error, {
-        tags: { 
-          section: 'heartbeat_service', 
-          error_type: 'execution_error' 
+        tags: {
+          section: 'heartbeat_service',
+          error_type: 'execution_error'
         }
       });
 
@@ -337,7 +342,7 @@ class HeartbeatService {
   async getStatus() {
     const now = Date.now();
     const timeSinceLastHeartbeat = this.lastHeartbeatTime ? (now - this.lastHeartbeatTime) : null;
-    const timeUntilNext = timeSinceLastHeartbeat ? 
+    const timeUntilNext = timeSinceLastHeartbeat ?
       Math.max(0, HEARTBEAT_INTERVAL_MS - timeSinceLastHeartbeat) : 0;
 
     return {
@@ -347,7 +352,7 @@ class HeartbeatService {
       timeSinceLastHeartbeat,
       timeUntilNextHeartbeat: timeUntilNext,
       nextHeartbeatDue: timeSinceLastHeartbeat >= HEARTBEAT_INTERVAL_MS,
-      isTaskRegistered: await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK_NAME).catch(() => false)
+      isTaskRegistered: this.isActive // Use the service's isActive state as a proxy
     };
   }
 

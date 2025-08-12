@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import HeartbeatService from '../services/HeartbeatService';
 import LocationService from '../services/LocationService';
-import Card from './Card';
-import Button from './Button';
+import { Card } from './Card';
+import { Button } from './Button';
 
 const HeartbeatDebugScreen = () => {
   const [heartbeatStatus, setHeartbeatStatus] = useState(null);
@@ -78,7 +78,7 @@ const HeartbeatDebugScreen = () => {
       }
     >
       <Text style={styles.title}>Heartbeat Debug Screen</Text>
-      
+
       {/* Heartbeat Service Status */}
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>Heartbeat Service Status</Text>
@@ -90,31 +90,31 @@ const HeartbeatDebugScreen = () => {
                 {heartbeatStatus.isActive ? 'YES' : 'NO'}
               </Text>
             </View>
-            
+
             <View style={styles.statusRow}>
               <Text style={styles.label}>Task Registered:</Text>
               <Text style={[styles.value, { color: getStatusColor(heartbeatStatus.isTaskRegistered) }]}>
                 {heartbeatStatus.isTaskRegistered ? 'YES' : 'NO'}
               </Text>
             </View>
-            
+
             <View style={styles.statusRow}>
               <Text style={styles.label}>Interval:</Text>
               <Text style={styles.value}>{formatDuration(heartbeatStatus.intervalMs)}</Text>
             </View>
-            
+
             <View style={styles.statusRow}>
               <Text style={styles.label}>Last Heartbeat:</Text>
               <Text style={styles.value}>{formatTime(heartbeatStatus.lastHeartbeatTime)}</Text>
             </View>
-            
+
             <View style={styles.statusRow}>
               <Text style={styles.label}>Time Since Last:</Text>
               <Text style={styles.value}>
                 {heartbeatStatus.timeSinceLastHeartbeat ? formatDuration(heartbeatStatus.timeSinceLastHeartbeat) : 'N/A'}
               </Text>
             </View>
-            
+
             <View style={styles.statusRow}>
               <Text style={styles.label}>Next Heartbeat In:</Text>
               <Text style={[styles.value, { color: heartbeatStatus.nextHeartbeatDue ? '#ef4444' : '#10b981' }]}>
@@ -138,12 +138,12 @@ const HeartbeatDebugScreen = () => {
                 {locationStatus.isTracking ? 'YES' : 'NO'}
               </Text>
             </View>
-            
+
             <View style={styles.statusRow}>
               <Text style={styles.label}>Current Activity:</Text>
               <Text style={styles.value}>{locationStatus.currentActivity}</Text>
             </View>
-            
+
             {locationStatus.heartbeatStatus && (
               <>
                 <View style={styles.statusRow}>
@@ -170,14 +170,14 @@ const HeartbeatDebugScreen = () => {
               {lastHeartbeatResult.success ? 'YES' : 'NO'}
             </Text>
           </View>
-          
+
           {lastHeartbeatResult.location_source && (
             <View style={styles.statusRow}>
               <Text style={styles.label}>Location Source:</Text>
               <Text style={styles.value}>{lastHeartbeatResult.location_source}</Text>
             </View>
           )}
-          
+
           {lastHeartbeatResult.has_location !== undefined && (
             <View style={styles.statusRow}>
               <Text style={styles.label}>Has Location:</Text>
@@ -186,14 +186,14 @@ const HeartbeatDebugScreen = () => {
               </Text>
             </View>
           )}
-          
+
           {lastHeartbeatResult.error && (
             <View style={styles.statusRow}>
               <Text style={styles.label}>Error:</Text>
               <Text style={[styles.value, styles.errorText]}>{lastHeartbeatResult.error}</Text>
             </View>
           )}
-          
+
           <View style={styles.statusRow}>
             <Text style={styles.label}>Timestamp:</Text>
             <Text style={styles.value}>{formatTime(lastHeartbeatResult.timestamp)}</Text>
@@ -205,15 +205,18 @@ const HeartbeatDebugScreen = () => {
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>Test Actions</Text>
         <Button
-          title="Force Heartbeat Now"
           onPress={forceHeartbeat}
           style={styles.button}
-        />
+        >
+          Force Heartbeat Now
+        </Button>
         <Button
-          title="Refresh Status"
           onPress={() => onRefresh()}
-          style={[styles.button, styles.secondaryButton]}
-        />
+          variant="secondary"
+          style={styles.button}
+        >
+          Refresh Status
+        </Button>
       </Card>
 
       {/* Info */}
@@ -284,9 +287,6 @@ const styles = StyleSheet.create({
   },
   button: {
     marginBottom: 12,
-  },
-  secondaryButton: {
-    backgroundColor: '#6b7280',
   },
   errorText: {
     color: '#ef4444',
