@@ -158,6 +158,31 @@ class TimelineService {
     await Promise.all(promises);
   }
 
+  async fetchLocationPointsForDate(date, authToken) {
+    try {
+      const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+      const response = await fetch(`${this.API_URL}/api/timeline/location_points?date=${dateString}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Location points API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Failed to fetch location points from API:', error);
+      throw error;
+    }
+  }
+
   formatDuration(seconds) {
     if (!seconds) return '0m';
 

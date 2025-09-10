@@ -1,4 +1,6 @@
 import LocationCacheService from './LocationCacheService';
+import ClientTimelineProcessor from './ClientTimelineProcessor';
+import SmartGeocodingService from './SmartGeocodingService';
 import { getAuthTokenForBackgroundTask } from '../AuthContext';
 import * as Sentry from '@sentry/react-native';
 import * as Network from 'expo-network';
@@ -137,23 +139,27 @@ class LocationSyncService {
 
       const results = await Promise.all([
         this.syncLocations(authToken),
-        this.syncHeartbeats(authToken)
+        this.syncHeartbeats(authToken),
+        this.syncHybridTimeline(authToken),
+        this.syncGeocodeRequests(authToken)
       ]);
 
       const locationResult = results[0];
       const heartbeatResult = results[1];
+      const timelineResult = results[2];
+      const geocodeResult = results[3];
 
-      const totalSynced = locationResult.synced + heartbeatResult.synced;
-      const hasErrors = locationResult.errors > 0 || heartbeatResult.errors > 0;
+      const totalSynced = locationResult.synced + heartbeatResult.synced + timelineResult.synced + geocodeResult.synced;
+      const hasErrors = locationResult.errors > 0 || heartbeatResult.errors > 0 || timelineResult.errors > 0 || geocodeResult.errors > 0;
 
       if (totalSynced > 0) {
         this.consecutiveFailures = 0;
-        console.log(`✅ Sync completed: ${locationResult.synced} locations, ${heartbeatResult.synced} heartbeats`);
+        console.log(`✅ Sync completed: ${locationResult.synced} locations, ${heartbeatResult.synced} heartbeats, ${timelineResult.synced} timeline insights, ${geocodeResult.synced} geocodes`);
         
         Sentry.addBreadcrumb({
-          message: `Location sync completed: ${totalSynced} items`,
+          message: `Hybrid sync completed: ${totalSynced} items`,
           level: 'info',
-          data: { reason, locationResult, heartbeatResult }
+          data: { reason, locationResult, heartbeatResult, timelineResult, geocodeResult }
         });
       }
 
@@ -165,6 +171,8 @@ class LocationSyncService {
         reason: 'completed',
         locationResult,
         heartbeatResult,
+        timelineResult,
+        geocodeResult,
         totalSynced
       };
 
@@ -340,6 +348,203 @@ class LocationSyncService {
   }
 
   /**
+   * Sync hybrid timeline insights to server
+   */
+  async syncHybridTimeline(authToken) {
+    const result = { synced: 0, errors: 0, details: [] };
+
+    try {
+      // Process recent locations into timeline segments
+      const recentSegments = await ClientTimelineProcessor.processRecentLocations(2); // Last 2 hours
+      
+      if (recentSegments.length === 0) {
+        return result;
+      }
+
+      console.log(`🧠 Syncing ${recentSegments.length} client timeline insights...`);
+
+      // Get recent raw locations for context
+      const cutoffTime = Date.now() - (2 * 60 * 60 * 1000); // 2 hours ago
+      const rawLocations = await LocationCacheService.db.getAllAsync(`
+        SELECT * FROM cached_locations 
+        WHERE timestamp >= ? 
+        ORDER BY timestamp ASC
+      `, [Math.floor(cutoffTime / 1000)]);
+
+      if (rawLocations.length === 0) {
+        return result;
+      }
+
+      // Build hybrid payload
+      const hybridPayload = {
+        type: 'hybrid_timeline_batch',
+        source: 'client_timeline_processor',
+        timestamp: Date.now(),
+        raw_locations: rawLocations.slice(0, 200).map(row => ({ // Limit to 200 locations
+          uuid: row.uuid,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          accuracy: row.accuracy,
+          speed: row.speed,
+          timestamp: row.timestamp * 1000,
+          is_moving: Boolean(row.is_moving),
+          activity: row.activity_type ? {
+            type: row.activity_type,
+            confidence: row.activity_confidence
+          } : null
+        })),
+        client_insights: {
+          segments: recentSegments.map(segment => ({
+            type: segment.type,
+            start_time: segment.startTime,
+            end_time: segment.endTime,
+            center_latitude: segment.centerLat,
+            center_longitude: segment.centerLon,
+            confidence_score: segment.confidence,
+            location_count: segment.locationCount,
+            distance_km: segment.distance || 0,
+            detection_method: segment.detectedViaNonlinear ? 'nonlinear_area' : 'area_based',
+            transportation_mode: segment.transportationMode || null,
+            place_name: segment.placeName || null,
+            place_address: segment.placeAddress || null
+          })),
+          processing_stats: {
+            total_locations_processed: rawLocations.length,
+            segments_created: recentSegments.length,
+            visits: recentSegments.filter(s => s.type === 'visit').length,
+            travels: recentSegments.filter(s => s.type === 'travel').length,
+            avg_confidence: recentSegments.reduce((sum, s) => sum + s.confidence, 0) / recentSegments.length,
+            processing_time_range: {
+              start: Math.min(...rawLocations.map(r => r.timestamp * 1000)),
+              end: Math.max(...rawLocations.map(r => r.timestamp * 1000))
+            }
+          }
+        }
+      };
+
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/users/hybrid_timeline`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(hybridPayload),
+        signal: createAbortSignalWithTimeout(45000) // 45 second timeout for larger payload
+      });
+
+      if (response.ok) {
+        // Mark timeline segments as synced
+        const segmentIds = recentSegments.map(s => s.id).filter(id => id);
+        if (segmentIds.length > 0) {
+          await LocationCacheService.db.runAsync(`
+            UPDATE local_timeline_segments 
+            SET synced = 1, updated_at = strftime('%s', 'now')
+            WHERE id IN (${segmentIds.map(() => '?').join(',')})
+          `, segmentIds);
+        }
+        
+        result.synced = recentSegments.length;
+        result.details.push(`Successfully synced ${recentSegments.length} timeline insights`);
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        result.errors++;
+        result.details.push(`HTTP ${response.status}: ${errorText}`);
+        console.warn(`🧠 Hybrid timeline sync failed: HTTP ${response.status}`, errorText);
+      }
+
+    } catch (error) {
+      result.errors++;
+      result.details.push(`Exception: ${error.message}`);
+      console.error('🧠 Hybrid timeline sync exception:', error);
+    }
+
+    return result;
+  }
+
+  /**
+   * Sync pending geocoding requests to server
+   */
+  async syncGeocodeRequests(authToken) {
+    const result = { synced: 0, errors: 0, details: [] };
+
+    try {
+      const pendingRequests = await SmartGeocodingService.getPendingGeocodeRequests(10);
+      
+      if (pendingRequests.length === 0) {
+        return result;
+      }
+
+      console.log(`📍 Syncing ${pendingRequests.length} geocoding requests...`);
+
+      // Batch geocoding requests
+      const geocodePayload = {
+        type: 'batch_geocode_request',
+        source: 'mobile_app',
+        timestamp: Date.now(),
+        requests: pendingRequests.map(req => ({
+          id: req.id,
+          latitude: req.latitude,
+          longitude: req.longitude,
+          timeline_segment_id: req.timelineSegmentId,
+          priority: req.priority,
+          requested_at: req.requestedAt.toISOString()
+        }))
+      };
+
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/users/geocode_batch`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(geocodePayload),
+        signal: createAbortSignalWithTimeout(30000)
+      });
+
+      if (response.ok) {
+        const responseData = await response.json();
+        
+        // Process geocoding results if provided immediately
+        if (responseData.results && responseData.results.length > 0) {
+          for (const geocodeResult of responseData.results) {
+            await SmartGeocodingService.processServerGeocodeResponse(
+              geocodeResult.request_id,
+              geocodeResult.location_data
+            );
+          }
+        } else {
+          // Mark requests as processing if server will handle them asynchronously
+          const requestIds = pendingRequests.map(req => req.id);
+          if (requestIds.length > 0) {
+            await LocationCacheService.db.runAsync(`
+              UPDATE geocoding_queue 
+              SET status = 'processing', last_attempt_at = strftime('%s', 'now')
+              WHERE id IN (${requestIds.map(() => '?').join(',')})
+            `, requestIds);
+          }
+        }
+        
+        result.synced = pendingRequests.length;
+        result.details.push(`Successfully synced ${pendingRequests.length} geocoding requests`);
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        result.errors++;
+        result.details.push(`HTTP ${response.status}: ${errorText}`);
+        console.warn(`📍 Geocoding sync failed: HTTP ${response.status}`, errorText);
+      }
+
+    } catch (error) {
+      result.errors++;
+      result.details.push(`Exception: ${error.message}`);
+      console.error('📍 Geocoding sync exception:', error);
+    }
+
+    return result;
+  }
+
+  /**
    * Perform maintenance tasks (cleanup, etc.)
    */
   async performMaintenance() {
@@ -349,15 +554,65 @@ class LocationSyncService {
       // Clean up old synced data (keep 30 days)
       const cleanupResult = await LocationCacheService.cleanupOldData(30);
       
-      console.log(`🧹 Maintenance completed: cleaned ${cleanupResult.locationsDeleted + cleanupResult.heartbeatsDeleted} records`);
+      // Clean up geocoding cache
+      const geocodeCleanup = await SmartGeocodingService.cleanupExpiredData();
       
-      return cleanupResult;
+      console.log(`🧹 Maintenance completed: cleaned ${cleanupResult.locationsDeleted + cleanupResult.heartbeatsDeleted} location records, ${geocodeCleanup.geocodesDeleted + geocodeCleanup.requestsDeleted} geocoding records`);
+      
+      return {
+        ...cleanupResult,
+        geocodesDeleted: geocodeCleanup.geocodesDeleted,
+        geocodeRequestsDeleted: geocodeCleanup.requestsDeleted
+      };
     } catch (error) {
       console.error('🧹 Maintenance failed:', error);
       Sentry.captureException(error, {
         tags: { section: 'location_sync', error_type: 'maintenance_error' }
       });
-      return { locationsDeleted: 0, heartbeatsDeleted: 0 };
+      return { locationsDeleted: 0, heartbeatsDeleted: 0, geocodesDeleted: 0, geocodeRequestsDeleted: 0 };
+    }
+  }
+
+  /**
+   * Trigger intelligent timeline processing and sync
+   */
+  async processAndSyncTimeline(options = {}) {
+    try {
+      const hoursBack = options.hoursBack || 4;
+      console.log(`🧠 Processing timeline for last ${hoursBack} hours...`);
+      
+      // Process recent locations into timeline segments
+      const segments = await ClientTimelineProcessor.processRecentLocations(hoursBack);
+      
+      // Geocode visits for better place recognition
+      const geocodedSegments = [];
+      for (const segment of segments) {
+        if (segment.type === 'visit') {
+          const geocoded = await SmartGeocodingService.geocodeTimelineSegment(segment);
+          geocodedSegments.push(geocoded);
+        } else {
+          geocodedSegments.push(segment);
+        }
+      }
+      
+      console.log(`✅ Processed ${segments.length} timeline segments (${segments.filter(s => s.type === 'visit').length} visits, ${segments.filter(s => s.type === 'travel').length} travels)`);
+      
+      // Trigger sync if we have network and auth
+      const networkState = await Network.getNetworkStateAsync();
+      const authToken = await getAuthTokenForBackgroundTask();
+      
+      if (networkState.isConnected && authToken) {
+        await this.syncNow('timeline_processing');
+      }
+      
+      return geocodedSegments;
+      
+    } catch (error) {
+      console.error('❌ Timeline processing and sync failed:', error);
+      Sentry.captureException(error, {
+        tags: { section: 'location_sync', error_type: 'timeline_processing_error' }
+      });
+      return [];
     }
   }
 }

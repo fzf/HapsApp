@@ -18,6 +18,9 @@ const MapViewScreen = () => {
     longitudeDelta: 0.0421,
   });
   const [selectedItem, setSelectedItem] = useState(null);
+  const [showLocationPoints, setShowLocationPoints] = useState(false);
+  const [locationPoints, setLocationPoints] = useState([]);
+  const [locationPointsLoading, setLocationPointsLoading] = useState(false);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -58,6 +61,58 @@ const MapViewScreen = () => {
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const toggleLocationPoints = async () => {
+    if (showLocationPoints) {
+      setShowLocationPoints(false);
+      setLocationPoints([]);
+    } else {
+      try {
+        setLocationPointsLoading(true);
+        const locationData = await TimelineService.fetchLocationPointsForDate(selectedDate, token);
+        setLocationPoints(locationData.location_points || []);
+        setShowLocationPoints(true);
+        
+        // Adjust map region to fit location points if available
+        if (locationData.location_points && locationData.location_points.length > 0) {
+          const bounds = getLocationPointsBounds(locationData.location_points);
+          setMapRegion(bounds);
+        }
+      } catch (error) {
+        console.error('Failed to load location points:', error);
+        Alert.alert('Error', 'Failed to load location points for this date');
+      } finally {
+        setLocationPointsLoading(false);
+      }
+    }
+  };
+
+  const getLocationPointsBounds = (points) => {
+    if (!points || points.length === 0) {
+      return mapRegion;
+    }
+
+    const latitudes = points.map(p => p.latitude);
+    const longitudes = points.map(p => p.longitude);
+
+    const minLat = Math.min(...latitudes);
+    const maxLat = Math.max(...latitudes);
+    const minLng = Math.min(...longitudes);
+    const maxLng = Math.max(...longitudes);
+
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    const latDelta = Math.max(maxLat - minLat, 0.01) * 1.2;
+    const lngDelta = Math.max(maxLng - minLng, 0.01) * 1.2;
+
+    return {
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    };
   };
 
   const getVisitColor = (index) => {
@@ -120,18 +175,44 @@ const MapViewScreen = () => {
     return paths;
   };
 
+  const renderLocationPoints = () => {
+    if (!showLocationPoints || !locationPoints) return null;
+
+    return locationPoints.map((point, index) => (
+      <Marker
+        key={`location-point-${point.id}`}
+        coordinate={{
+          latitude: point.latitude,
+          longitude: point.longitude,
+        }}
+        title={`Location Point ${index + 1}`}
+        description={`${TimelineService.formatDateTime(point.recorded_at)} ${point.is_moving ? '(Moving)' : '(Stationary)'}`}
+        pinColor={point.is_moving ? "#3B82F6" : "#10B981"}
+        onPress={() => setSelectedItem({
+          ...point,
+          type: 'location_point',
+          start_time: point.recorded_at
+        })}
+      />
+    ));
+  };
+
   const renderSelectedItemDetails = () => {
     if (!selectedItem) return null;
 
     const isVisit = selectedItem.type === 'visit';
+    const isTravel = selectedItem.type === 'travel';
+    const isLocationPoint = selectedItem.type === 'location_point';
 
     return (
       <Card style={styles.detailCard}>
         <CardHeader>
           <View style={styles.detailHeader}>
-            <CardTitle>{isVisit ? 'Visit Details' : 'Travel Details'}</CardTitle>
-            <Badge variant={isVisit ? 'success' : 'info'}>
-              {isVisit ? 'Visit' : 'Travel'}
+            <CardTitle>
+              {isLocationPoint ? 'Location Point Details' : isVisit ? 'Visit Details' : 'Travel Details'}
+            </CardTitle>
+            <Badge variant={isLocationPoint ? 'warning' : isVisit ? 'success' : 'info'}>
+              {isLocationPoint ? 'GPS Point' : isVisit ? 'Visit' : 'Travel'}
             </Badge>
           </View>
         </CardHeader>
@@ -142,24 +223,55 @@ const MapViewScreen = () => {
           {isVisit && selectedItem.location?.address && (
             <Text style={styles.locationAddress}>{selectedItem.location.address}</Text>
           )}
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Start:</Text>
-            <Text style={styles.detailValue}>{TimelineService.formatTime(selectedItem.start_time)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>End:</Text>
-            <Text style={styles.detailValue}>{TimelineService.formatTime(selectedItem.end_time)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Duration:</Text>
-            <Text style={styles.detailValue}>{TimelineService.formatDuration(selectedItem.duration)}</Text>
-          </View>
-          {!isVisit && selectedItem.distance && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Distance:</Text>
-              <Text style={styles.detailValue}>{TimelineService.formatDistance(selectedItem.distance)}</Text>
-            </View>
+          
+          {isLocationPoint ? (
+            <>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Recorded:</Text>
+                <Text style={styles.detailValue}>{TimelineService.formatDateTime(selectedItem.recorded_at)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Status:</Text>
+                <Text style={styles.detailValue}>{selectedItem.is_moving ? 'Moving' : 'Stationary'}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Accuracy:</Text>
+                <Text style={styles.detailValue}>{selectedItem.accuracy ? `${selectedItem.accuracy}m` : 'N/A'}</Text>
+              </View>
+              {selectedItem.speed && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Speed:</Text>
+                  <Text style={styles.detailValue}>{(selectedItem.speed * 3.6).toFixed(1)} km/h</Text>
+                </View>
+              )}
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Coordinates:</Text>
+                <Text style={styles.detailValue}>{selectedItem.latitude.toFixed(6)}, {selectedItem.longitude.toFixed(6)}</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Start:</Text>
+                <Text style={styles.detailValue}>{TimelineService.formatTime(selectedItem.start_time)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>End:</Text>
+                <Text style={styles.detailValue}>{TimelineService.formatTime(selectedItem.end_time)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Duration:</Text>
+                <Text style={styles.detailValue}>{TimelineService.formatDuration(selectedItem.duration)}</Text>
+              </View>
+              {isTravel && selectedItem.distance && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Distance:</Text>
+                  <Text style={styles.detailValue}>{TimelineService.formatDistance(selectedItem.distance)}</Text>
+                </View>
+              )}
+            </>
           )}
+          
           <Button
             variant="outline"
             size="sm"
@@ -197,9 +309,25 @@ const MapViewScreen = () => {
               <Text style={styles.statLabel}>Distance</Text>
             </View>
           </View>
+          <View style={styles.locationToggleContainer}>
+            <Button
+              variant={showLocationPoints ? 'primary' : 'outline'}
+              size="sm"
+              onPress={toggleLocationPoints}
+              style={styles.locationToggleButton}
+              disabled={locationPointsLoading}
+            >
+              {locationPointsLoading ? '⏳ Loading...' : showLocationPoints ? '📍 Hide GPS Points' : '📍 Show GPS Points'}
+            </Button>
+          </View>
           {timeline.fromCache && (
             <Badge variant="warning" style={styles.cacheBadge}>
               Offline Data
+            </Badge>
+          )}
+          {showLocationPoints && locationPoints.length > 0 && (
+            <Badge variant="info" style={styles.pointsBadge}>
+              {locationPoints.length} location points
             </Badge>
           )}
         </CardContent>
@@ -256,6 +384,7 @@ const MapViewScreen = () => {
         >
           {renderVisitMarkers()}
           {renderTravelPaths()}
+          {renderLocationPoints()}
         </MapView>
       </View>
 
@@ -332,6 +461,17 @@ const styles = StyleSheet.create({
   cacheBadge: {
     alignSelf: 'center',
     marginTop: 8,
+  },
+  locationToggleContainer: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  locationToggleButton: {
+    minWidth: 140,
+  },
+  pointsBadge: {
+    alignSelf: 'center',
+    marginTop: 4,
   },
   mapContainer: {
     flex: 1,

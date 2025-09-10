@@ -15,6 +15,9 @@ const TimelineListScreen = () => {
   const [viewMode, setViewMode] = useState('all'); // 'all', 'visits', 'travels'
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
+  const [showLocationPoints, setShowLocationPoints] = useState(false);
+  const [locationPoints, setLocationPoints] = useState([]);
+  const [locationPointsLoading, setLocationPointsLoading] = useState(false);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -61,13 +64,63 @@ const TimelineListScreen = () => {
     setExpandedItems(newExpanded);
   };
 
-  const handleShowMap = (visit) => {
-    if (visit.center_latitude && visit.center_longitude) {
+  const handleShowMap = async (visit = null) => {
+    if (visit && visit.center_latitude && visit.center_longitude) {
       setSelectedVisit(visit);
-      setMapModalVisible(true);
+      setShowLocationPoints(false);
+    } else if (!visit) {
+      // Load location points for the day
+      try {
+        setLocationPointsLoading(true);
+        const locationData = await TimelineService.fetchLocationPointsForDate(selectedDate, token);
+        setLocationPoints(locationData.location_points || []);
+        setSelectedVisit(null);
+        setShowLocationPoints(true);
+      } catch (error) {
+        console.error('Failed to load location points:', error);
+        Alert.alert('Error', 'Failed to load location points for this date');
+        return;
+      } finally {
+        setLocationPointsLoading(false);
+      }
     } else {
       Alert.alert('No Location Data', 'This visit does not have location coordinates available.');
+      return;
     }
+    
+    setMapModalVisible(true);
+  };
+
+  const getLocationPointsRegion = () => {
+    if (!locationPoints || locationPoints.length === 0) {
+      return {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      };
+    }
+
+    const latitudes = locationPoints.map(p => p.latitude);
+    const longitudes = locationPoints.map(p => p.longitude);
+
+    const minLat = Math.min(...latitudes);
+    const maxLat = Math.max(...latitudes);
+    const minLng = Math.min(...longitudes);
+    const maxLng = Math.max(...longitudes);
+
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+
+    const latDelta = Math.max(maxLat - minLat, 0.01) * 1.2;
+    const lngDelta = Math.max(maxLng - minLng, 0.01) * 1.2;
+
+    return {
+      latitude: centerLat,
+      longitude: centerLng,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    };
   };
 
   const getFilteredData = () => {
@@ -233,6 +286,16 @@ const TimelineListScreen = () => {
             Travels Only
           </Button>
         </View>
+        <View style={styles.mapToggleContainer}>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => handleShowMap()}
+            style={styles.mapToggleButton}
+          >
+            🗺️ View Location Points
+          </Button>
+        </View>
       </CardContent>
     </Card>
   );
@@ -364,9 +427,16 @@ const TimelineListScreen = () => {
           {/* Modal Header */}
           <View style={styles.modalHeader}>
             <View style={styles.modalTitleContainer}>
-              <Text style={styles.modalTitle}>Visit Location</Text>
+              <Text style={styles.modalTitle}>
+                {showLocationPoints ? 'Location Points' : 'Visit Location'}
+              </Text>
               {selectedVisit?.location?.name && (
                 <Text style={styles.modalSubtitle}>{selectedVisit.location.name}</Text>
+              )}
+              {showLocationPoints && (
+                <Text style={styles.modalSubtitle}>
+                  {locationPoints.length} points for {formatDate(selectedDate)}
+                </Text>
               )}
             </View>
             <Button
@@ -380,7 +450,32 @@ const TimelineListScreen = () => {
           </View>
 
           {/* Map */}
-          {selectedVisit && (
+          {locationPointsLoading ? (
+            <View style={styles.mapLoadingContainer}>
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text style={styles.mapLoadingText}>Loading location points...</Text>
+            </View>
+          ) : showLocationPoints && locationPoints.length > 0 ? (
+            <MapView
+              style={styles.modalMap}
+              region={getLocationPointsRegion()}
+              showsUserLocation={true}
+              showsMyLocationButton={true}
+            >
+              {locationPoints.map((point, index) => (
+                <Marker
+                  key={point.id}
+                  coordinate={{
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                  }}
+                  title={`Location ${index + 1}`}
+                  description={TimelineService.formatDateTime(point.recorded_at)}
+                  pinColor={point.is_moving ? "#3B82F6" : "#10B981"}
+                />
+              ))}
+            </MapView>
+          ) : selectedVisit ? (
             <MapView
               style={styles.modalMap}
               region={{
@@ -402,6 +497,10 @@ const TimelineListScreen = () => {
                 pinColor="#10B981"
               />
             </MapView>
+          ) : (
+            <View style={styles.mapLoadingContainer}>
+              <Text style={styles.mapLoadingText}>No location data available</Text>
+            </View>
           )}
 
           {/* Visit Details */}
@@ -513,6 +612,13 @@ const styles = StyleSheet.create({
   viewModeButton: {
     flex: 1,
     marginHorizontal: 4,
+  },
+  mapToggleContainer: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  mapToggleButton: {
+    minWidth: 150,
   },
   list: {
     flex: 1,
@@ -692,6 +798,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
     fontWeight: '500',
+  },
+  mapLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  mapLoadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
   },
 });
 
