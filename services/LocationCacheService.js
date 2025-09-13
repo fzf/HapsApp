@@ -109,6 +109,9 @@ class LocationCacheService {
         place_name TEXT,
         place_address TEXT,
         confidence REAL DEFAULT 0.5,
+        is_active BOOLEAN DEFAULT 0,
+        visit_radius REAL DEFAULT 150,
+        last_updated INTEGER,
         synced BOOLEAN DEFAULT 0,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
         updated_at INTEGER DEFAULT (strftime('%s', 'now'))
@@ -123,6 +126,8 @@ class LocationCacheService {
       CREATE INDEX IF NOT EXISTS idx_heartbeats_timestamp ON cached_heartbeats(timestamp);
       CREATE INDEX IF NOT EXISTS idx_heartbeats_synced ON cached_heartbeats(synced);
       CREATE INDEX IF NOT EXISTS idx_timeline_time_range ON local_timeline_segments(start_time, end_time);
+      CREATE INDEX IF NOT EXISTS idx_timeline_active ON local_timeline_segments(is_active);
+      CREATE INDEX IF NOT EXISTS idx_timeline_type ON local_timeline_segments(type);
     `);
 
     console.log('📁 Database tables created successfully');

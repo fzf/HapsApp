@@ -6,6 +6,7 @@ import LocationCacheService from './LocationCacheService';
 import LocationSyncService from './LocationSyncService';
 import HeartbeatService from './HeartbeatService';
 import LoggingService from './LoggingService';
+import VisitTrackingService from './VisitTrackingService';
 import * as Sentry from '@sentry/react-native';
 
 const LOCATION_TASK_NAME = 'background-location-task';
@@ -44,6 +45,9 @@ class LocationService {
     try {
       // Initialize cache service
       await LocationCacheService.initialize();
+      
+      // Initialize visit tracking service
+      await VisitTrackingService.initialize();
       
       // Define background tasks
       this.defineBackgroundTasks();
@@ -157,6 +161,9 @@ class LocationService {
       
       // Cache location locally
       await LocationCacheService.cacheLocation(locationData);
+      
+      // Process for visit detection
+      await VisitTrackingService.processLocation(locationData);
       
       // Update last known location
       this.lastKnownLocation = location;
@@ -419,6 +426,7 @@ class LocationService {
       const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
       const syncStatus = await LocationSyncService.getSyncStatus();
       const heartbeatStatus = await HeartbeatService.getStatus();
+      const visitStats = await VisitTrackingService.getVisitStats();
       
       return {
         isTracking: this.isTracking,
@@ -428,7 +436,8 @@ class LocationService {
         lastKnownLocation: this.lastKnownLocation,
         lastActivityTime: this.lastActivityTime,
         syncStatus,
-        heartbeatStatus
+        heartbeatStatus,
+        visitStats
       };
     } catch (error) {
       console.error('❌ Error getting service status:', error);
@@ -440,7 +449,8 @@ class LocationService {
         lastKnownLocation: null,
         lastActivityTime: null,
         syncStatus: null,
-        heartbeatStatus: null
+        heartbeatStatus: null,
+        visitStats: null
       };
     }
   }

@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 import { useAuth } from '../AuthContext';
 import TimelineService from '../services/TimelineService';
+import { VisitTrackingService } from '../services';
 import { Button } from './Button';
 import { Card, CardHeader, CardTitle, CardContent } from './Card';
 import { Badge } from './Badge';
 
 const MapViewScreen = () => {
   const [timeline, setTimeline] = useState(null);
+  const [localVisits, setLocalVisits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showLocalVisits, setShowLocalVisits] = useState(true);
   const [mapRegion, setMapRegion] = useState({
     latitude: 37.7749,
     longitude: -122.4194,
@@ -22,7 +25,14 @@ const MapViewScreen = () => {
 
   useEffect(() => {
     loadTimelineData();
+    loadLocalVisits();
   }, [selectedDate, token]);
+
+  useEffect(() => {
+    if (showLocalVisits) {
+      loadLocalVisits();
+    }
+  }, [showLocalVisits]);
 
   const loadTimelineData = async () => {
     if (!token) return;
@@ -43,6 +53,44 @@ const MapViewScreen = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadLocalVisits = async () => {
+    try {
+      const hoursBack = 24;
+      const visits = await VisitTrackingService.getRecentVisits(hoursBack);
+      setLocalVisits(visits);
+
+      // Adjust map region to include local visits if they exist and showLocalVisits is true
+      if (showLocalVisits && visits.length > 0) {
+        const bounds = calculateVisitsBounds(visits);
+        setMapRegion(bounds);
+      }
+    } catch (error) {
+      console.error('Failed to load local visits:', error);
+    }
+  };
+
+  const calculateVisitsBounds = (visits) => {
+    if (visits.length === 0) return mapRegion;
+
+    const latitudes = visits.map(v => v.latitude);
+    const longitudes = visits.map(v => v.longitude);
+
+    const minLat = Math.min(...latitudes);
+    const maxLat = Math.max(...latitudes);
+    const minLng = Math.min(...longitudes);
+    const maxLng = Math.max(...longitudes);
+
+    const latDelta = Math.max((maxLat - minLat) * 1.3, 0.01);
+    const lngDelta = Math.max((maxLng - minLng) * 1.3, 0.01);
+
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: latDelta,
+      longitudeDelta: lngDelta,
+    };
   };
 
   const changeDate = (days) => {
@@ -87,6 +135,66 @@ const MapViewScreen = () => {
     });
   };
 
+  const renderLocalVisitMarkers = () => {
+    if (!showLocalVisits || !localVisits.length) return null;
+
+    return localVisits.map((visit, index) => {
+      const formatTime = (date) => {
+        if (!date) return 'Unknown';
+        return date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        });
+      };
+
+      const formatDuration = (seconds) => {
+        if (!seconds) return 'Unknown';
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+      };
+
+      return (
+        <React.Fragment key={`local-visit-${visit.id}`}>
+          {/* Visit radius circle */}
+          <Circle
+            center={{
+              latitude: visit.latitude,
+              longitude: visit.longitude,
+            }}
+            radius={150} // Default visit radius
+            fillColor="rgba(59, 130, 246, 0.1)"
+            strokeColor="rgba(59, 130, 246, 0.3)"
+            strokeWidth={2}
+          />
+          
+          {/* Visit marker */}
+          <Marker
+            coordinate={{
+              latitude: visit.latitude,
+              longitude: visit.longitude,
+            }}
+            pinColor="#3B82F6"
+            title={`Local Visit ${index + 1}`}
+            description={`${formatTime(visit.startTime)} - ${visit.endTime ? formatTime(visit.endTime) : 'Ongoing'} (${visit.duration ? formatDuration(visit.duration) : 'In progress'})`}
+            onPress={() => setSelectedItem({
+              ...visit,
+              type: 'local_visit',
+              center_latitude: visit.latitude,
+              center_longitude: visit.longitude,
+              start_time: visit.startTime,
+              end_time: visit.endTime
+            })}
+          />
+        </React.Fragment>
+      );
+    });
+  };
+
   const renderTravelPaths = () => {
     if (!timeline?.visits || timeline.visits.length < 2) return null;
 
@@ -124,37 +232,80 @@ const MapViewScreen = () => {
     if (!selectedItem) return null;
 
     const isVisit = selectedItem.type === 'visit';
+    const isLocalVisit = selectedItem.type === 'local_visit';
+    const isTravel = selectedItem.type === 'travel';
+
+    const formatTime = (time) => {
+      if (!time) return 'Unknown';
+      if (time instanceof Date) {
+        return time.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        });
+      }
+      return TimelineService.formatTime(time);
+    };
+
+    const formatDuration = (duration) => {
+      if (!duration) return 'Unknown';
+      if (typeof duration === 'number') {
+        const hours = Math.floor(duration / 3600);
+        const minutes = Math.floor((duration % 3600) / 60);
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+      }
+      return TimelineService.formatDuration(duration);
+    };
 
     return (
       <Card style={styles.detailCard}>
         <CardHeader>
           <View style={styles.detailHeader}>
-            <CardTitle>{isVisit ? 'Visit Details' : 'Travel Details'}</CardTitle>
-            <Badge variant={isVisit ? 'success' : 'info'}>
-              {isVisit ? 'Visit' : 'Travel'}
+            <CardTitle>
+              {isLocalVisit ? 'Local Visit Details' : isVisit ? 'Visit Details' : 'Travel Details'}
+            </CardTitle>
+            <Badge variant={isLocalVisit ? 'warning' : isVisit ? 'success' : 'info'}>
+              {isLocalVisit ? 'Local Visit' : isVisit ? 'Visit' : 'Travel'}
             </Badge>
           </View>
         </CardHeader>
         <CardContent>
-          {isVisit && selectedItem.location && (
+          {(isVisit || isLocalVisit) && selectedItem.location && (
             <Text style={styles.locationName}>{selectedItem.location.name}</Text>
           )}
-          {isVisit && selectedItem.location?.address && (
+          {(isVisit || isLocalVisit) && selectedItem.location?.address && (
             <Text style={styles.locationAddress}>{selectedItem.location.address}</Text>
           )}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Start:</Text>
-            <Text style={styles.detailValue}>{TimelineService.formatTime(selectedItem.start_time)}</Text>
+            <Text style={styles.detailValue}>{formatTime(selectedItem.start_time)}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>End:</Text>
-            <Text style={styles.detailValue}>{TimelineService.formatTime(selectedItem.end_time)}</Text>
+            <Text style={styles.detailValue}>
+              {selectedItem.end_time ? formatTime(selectedItem.end_time) : 'Ongoing'}
+            </Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Duration:</Text>
-            <Text style={styles.detailValue}>{TimelineService.formatDuration(selectedItem.duration)}</Text>
+            <Text style={styles.detailValue}>{formatDuration(selectedItem.duration)}</Text>
           </View>
-          {!isVisit && selectedItem.distance && (
+          {isLocalVisit && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Confidence:</Text>
+              <Text style={styles.detailValue}>{(selectedItem.confidence * 100).toFixed(0)}%</Text>
+            </View>
+          )}
+          {isLocalVisit && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Location Points:</Text>
+              <Text style={styles.detailValue}>{selectedItem.locationCount || 0}</Text>
+            </View>
+          )}
+          {isTravel && selectedItem.distance && (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Distance:</Text>
               <Text style={styles.detailValue}>{TimelineService.formatDistance(selectedItem.distance)}</Text>
@@ -174,6 +325,34 @@ const MapViewScreen = () => {
   };
 
   const renderTimelineStats = () => {
+    if (showLocalVisits) {
+      return (
+        <Card style={styles.statsCard}>
+          <CardContent>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{localVisits.length}</Text>
+                <Text style={styles.statLabel}>Local Visits</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>
+                  {localVisits.filter(v => !v.endTime).length}
+                </Text>
+                <Text style={styles.statLabel}>Active</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>24h</Text>
+                <Text style={styles.statLabel}>Period</Text>
+              </View>
+            </View>
+            <Badge variant="info" style={styles.cacheBadge}>
+              Real-time Detection
+            </Badge>
+          </CardContent>
+        </Card>
+      );
+    }
+
     if (!timeline) return null;
 
     const totalVisits = timeline.visits?.length || 0;
@@ -226,17 +405,38 @@ const MapViewScreen = () => {
               variant="outline"
               size="sm"
               onPress={() => changeDate(-1)}
+              disabled={showLocalVisits}
             >
               ← Previous
             </Button>
-            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+            <Text style={styles.dateText}>
+              {showLocalVisits ? 'Local Visits (24h)' : formatDate(selectedDate)}
+            </Text>
             <Button
               variant="outline"
               size="sm"
               onPress={() => changeDate(1)}
-              disabled={selectedDate.toDateString() === new Date().toDateString()}
+              disabled={showLocalVisits || selectedDate.toDateString() === new Date().toDateString()}
             >
               Next →
+            </Button>
+          </View>
+          
+          {/* View Toggle */}
+          <View style={styles.viewToggle}>
+            <Button
+              variant={showLocalVisits ? "primary" : "outline"}
+              size="sm"
+              onPress={() => setShowLocalVisits(true)}
+            >
+              📍 Local Visits
+            </Button>
+            <Button
+              variant={!showLocalVisits ? "primary" : "outline"}
+              size="sm"
+              onPress={() => setShowLocalVisits(false)}
+            >
+              📊 Server Timeline
             </Button>
           </View>
         </CardContent>
@@ -254,8 +454,8 @@ const MapViewScreen = () => {
           showsUserLocation={true}
           showsMyLocationButton={true}
         >
-          {renderVisitMarkers()}
-          {renderTravelPaths()}
+          {showLocalVisits ? renderLocalVisitMarkers() : renderVisitMarkers()}
+          {!showLocalVisits && renderTravelPaths()}
         </MapView>
       </View>
 
@@ -306,6 +506,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flex: 1,
     marginHorizontal: 16,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 8,
   },
   statsCard: {
     marginHorizontal: 16,

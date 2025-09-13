@@ -1,25 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, FlatList, SafeAreaView, TouchableOpacity, Modal } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Circle } from 'react-native-maps';
 import { useAuth } from '../AuthContext';
 import TimelineService from '../services/TimelineService';
+import { VisitTrackingService } from '../services';
 import { Button } from './Button';
 import { Card, CardHeader, CardTitle, CardContent } from './Card';
 import { Badge } from './Badge';
 
 const TimelineListScreen = () => {
   const [timeline, setTimeline] = useState(null);
+  const [localVisits, setLocalVisits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedItems, setExpandedItems] = useState(new Set());
-  const [viewMode, setViewMode] = useState('all'); // 'all', 'visits', 'travels'
+  const [viewMode, setViewMode] = useState('all'); // 'all', 'visits', 'travels', 'local_visits'
+  const [showLocalVisits, setShowLocalVisits] = useState(false);
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
   const { token } = useAuth();
 
   useEffect(() => {
-    loadTimelineData();
-  }, [selectedDate, token]);
+    if (showLocalVisits) {
+      loadLocalVisits();
+    } else {
+      loadTimelineData();
+    }
+  }, [selectedDate, token, showLocalVisits]);
+
+  useEffect(() => {
+    if (showLocalVisits) {
+      loadLocalVisits();
+    }
+  }, [showLocalVisits]);
 
   const loadTimelineData = async () => {
     if (!token) return;
@@ -31,6 +44,20 @@ const TimelineListScreen = () => {
     } catch (error) {
       console.error('Failed to load timeline data:', error);
       Alert.alert('Error', 'Failed to load timeline data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadLocalVisits = async () => {
+    try {
+      setLoading(true);
+      const hoursBack = 24;
+      const visits = await VisitTrackingService.getRecentVisits(hoursBack);
+      setLocalVisits(visits);
+    } catch (error) {
+      console.error('Failed to load local visits:', error);
+      Alert.alert('Error', 'Failed to load local visits');
     } finally {
       setLoading(false);
     }
@@ -71,6 +98,21 @@ const TimelineListScreen = () => {
   };
 
   const getFilteredData = () => {
+    if (showLocalVisits) {
+      if (viewMode === 'all' || viewMode === 'local_visits') {
+        return localVisits.map(visit => ({
+          ...visit,
+          type: 'local_visit',
+          center_latitude: visit.latitude,
+          center_longitude: visit.longitude,
+          start_time: visit.startTime,
+          end_time: visit.endTime,
+          sortTime: visit.startTime ? visit.startTime.getTime() : Date.now()
+        })).sort((a, b) => b.sortTime - a.sortTime); // Recent first for local visits
+      }
+      return [];
+    }
+
     if (!timeline) return [];
 
     let items = [];
@@ -99,7 +141,34 @@ const TimelineListScreen = () => {
 
   const renderTimelineItem = ({ item }) => {
     const isVisit = item.type === 'visit';
+    const isLocalVisit = item.type === 'local_visit';
+    const isTravel = item.type === 'travel';
     const isExpanded = expandedItems.has(`${item.type}-${item.id}`);
+
+    const formatTime = (time) => {
+      if (!time) return 'Unknown';
+      if (time instanceof Date) {
+        return time.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        });
+      }
+      return TimelineService.formatTime(time);
+    };
+
+    const formatDuration = (duration) => {
+      if (!duration) return 'Unknown';
+      if (typeof duration === 'number') {
+        const hours = Math.floor(duration / 3600);
+        const minutes = Math.floor((duration % 3600) / 60);
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+      }
+      return TimelineService.formatDuration(duration);
+    };
 
     return (
       <TouchableOpacity
@@ -107,25 +176,30 @@ const TimelineListScreen = () => {
         onPress={() => toggleItemExpansion(`${item.type}-${item.id}`)}
         activeOpacity={0.7}
       >
-        <Card style={[styles.itemCard, isVisit ? styles.visitCard : styles.travelCard]}>
+        <Card style={[styles.itemCard, 
+          isLocalVisit ? styles.localVisitCard : 
+          isVisit ? styles.visitCard : styles.travelCard]}>
           <CardContent>
             {/* Header */}
             <View style={styles.itemHeader}>
               <View style={styles.itemTitleRow}>
-                <Badge variant={isVisit ? 'success' : 'info'} style={styles.typeBadge}>
-                  {isVisit ? '📍 Visit' : '🚗 Travel'}
+                <Badge variant={
+                  isLocalVisit ? 'warning' : 
+                  isVisit ? 'success' : 'info'
+                } style={styles.typeBadge}>
+                  {isLocalVisit ? '🔵 Local Visit' : isVisit ? '📍 Visit' : '🚗 Travel'}
                 </Badge>
                 <Text style={styles.timeRange}>
-                  {TimelineService.formatTime(item.start_time)} - {TimelineService.formatTime(item.end_time)}
+                  {formatTime(item.start_time)} - {item.end_time ? formatTime(item.end_time) : 'Ongoing'}
                 </Text>
               </View>
               <Text style={styles.duration}>
-                {TimelineService.formatDuration(item.duration)}
+                {formatDuration(item.duration)}
               </Text>
             </View>
 
             {/* Location/Travel Info */}
-            {isVisit && item.location && (
+            {(isVisit || isLocalVisit) && item.location && (
               <View style={styles.locationInfo}>
                 <Text style={styles.locationName}>{item.location.name}</Text>
                 {item.location.address && (
@@ -134,7 +208,15 @@ const TimelineListScreen = () => {
               </View>
             )}
 
-            {!isVisit && item.distance && (
+            {isLocalVisit && (
+              <View style={styles.localVisitInfo}>
+                <Text style={styles.localVisitDetails}>
+                  Confidence: {(item.confidence * 100).toFixed(0)}% • Points: {item.locationCount || 0}
+                </Text>
+              </View>
+            )}
+
+            {isTravel && item.distance && (
               <View style={styles.travelInfo}>
                 <Text style={styles.travelDistance}>
                   Distance: {TimelineService.formatDistance(item.distance)}
@@ -149,16 +231,22 @@ const TimelineListScreen = () => {
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Start Time</Text>
                     <Text style={styles.detailValue}>
-                      {TimelineService.formatDateTime(item.start_time)}
+                      {isLocalVisit && item.start_time instanceof Date 
+                        ? item.start_time.toLocaleString('en-US') 
+                        : TimelineService.formatDateTime(item.start_time)}
                     </Text>
                   </View>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>End Time</Text>
                     <Text style={styles.detailValue}>
-                      {TimelineService.formatDateTime(item.end_time)}
+                      {item.end_time 
+                        ? (isLocalVisit && item.end_time instanceof Date 
+                          ? item.end_time.toLocaleString('en-US') 
+                          : TimelineService.formatDateTime(item.end_time))
+                        : 'Ongoing'}
                     </Text>
                   </View>
-                  {isVisit && item.center_latitude && item.center_longitude && (
+                  {(isVisit || isLocalVisit) && item.center_latitude && item.center_longitude && (
                     <View style={styles.detailItem}>
                       <Text style={styles.detailLabel}>Coordinates</Text>
                       <Text style={styles.detailValue}>
@@ -166,7 +254,23 @@ const TimelineListScreen = () => {
                       </Text>
                     </View>
                   )}
-                  {!isVisit && item.distance && (
+                  {isLocalVisit && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Detection Confidence</Text>
+                      <Text style={styles.detailValue}>
+                        {(item.confidence * 100).toFixed(1)}%
+                      </Text>
+                    </View>
+                  )}
+                  {isLocalVisit && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Location Points</Text>
+                      <Text style={styles.detailValue}>
+                        {item.locationCount || 0} points
+                      </Text>
+                    </View>
+                  )}
+                  {isTravel && item.distance && (
                     <View style={styles.detailItem}>
                       <Text style={styles.detailLabel}>Distance</Text>
                       <Text style={styles.detailValue}>
@@ -176,7 +280,7 @@ const TimelineListScreen = () => {
                   )}
                 </View>
                 {/* View on Map Button for visits */}
-                {isVisit && item.center_latitude && item.center_longitude && (
+                {(isVisit || isLocalVisit) && item.center_latitude && item.center_longitude && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -238,6 +342,37 @@ const TimelineListScreen = () => {
   );
 
   const renderTimelineStats = () => {
+    if (showLocalVisits) {
+      const activeVisits = localVisits.filter(v => !v.endTime).length;
+      const avgConfidence = localVisits.length > 0 
+        ? localVisits.reduce((sum, v) => sum + v.confidence, 0) / localVisits.length 
+        : 0;
+
+      return (
+        <Card style={styles.statsCard}>
+          <CardContent>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{localVisits.length}</Text>
+                <Text style={styles.statLabel}>Local Visits</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{activeVisits}</Text>
+                <Text style={styles.statLabel}>Active</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{(avgConfidence * 100).toFixed(0)}%</Text>
+                <Text style={styles.statLabel}>Avg Confidence</Text>
+              </View>
+            </View>
+            <Badge variant="info" style={styles.cacheBadge}>
+              Real-time Detection
+            </Badge>
+          </CardContent>
+        </Card>
+      );
+    }
+
     if (!timeline) return null;
 
     const filteredData = getFilteredData();
@@ -308,17 +443,44 @@ const TimelineListScreen = () => {
               variant="outline"
               size="sm"
               onPress={() => changeDate(-1)}
+              disabled={showLocalVisits}
             >
               ← Previous
             </Button>
-            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+            <Text style={styles.dateText}>
+              {showLocalVisits ? 'Local Visits (24h)' : formatDate(selectedDate)}
+            </Text>
             <Button
               variant="outline"
               size="sm"
               onPress={() => changeDate(1)}
-              disabled={selectedDate.toDateString() === new Date().toDateString()}
+              disabled={showLocalVisits || selectedDate.toDateString() === new Date().toDateString()}
             >
               Next →
+            </Button>
+          </View>
+          
+          {/* Data Source Toggle */}
+          <View style={styles.viewToggle}>
+            <Button
+              variant={showLocalVisits ? "primary" : "outline"}
+              size="sm"
+              onPress={() => {
+                setShowLocalVisits(true);
+                setViewMode('all');
+              }}
+            >
+              🔵 Local Visits
+            </Button>
+            <Button
+              variant={!showLocalVisits ? "primary" : "outline"}
+              size="sm"
+              onPress={() => {
+                setShowLocalVisits(false);
+                setViewMode('all');
+              }}
+            >
+              📊 Server Timeline
             </Button>
           </View>
         </CardContent>
@@ -328,7 +490,7 @@ const TimelineListScreen = () => {
       {renderTimelineStats()}
 
       {/* View Mode Selector */}
-      {renderViewModeSelector()}
+      {!showLocalVisits && renderViewModeSelector()}
 
       {/* Timeline List */}
       {filteredData.length > 0 ? (
@@ -392,14 +554,35 @@ const TimelineListScreen = () => {
               showsUserLocation={true}
               showsMyLocationButton={true}
             >
+              {selectedVisit.type === 'local_visit' && (
+                <Circle
+                  center={{
+                    latitude: selectedVisit.center_latitude,
+                    longitude: selectedVisit.center_longitude,
+                  }}
+                  radius={150}
+                  fillColor="rgba(59, 130, 246, 0.1)"
+                  strokeColor="rgba(59, 130, 246, 0.3)"
+                  strokeWidth={2}
+                />
+              )}
               <Marker
                 coordinate={{
                   latitude: selectedVisit.center_latitude,
                   longitude: selectedVisit.center_longitude,
                 }}
-                title={selectedVisit.location?.name || 'Visit Location'}
-                description={`${TimelineService.formatTime(selectedVisit.start_time)} - ${TimelineService.formatTime(selectedVisit.end_time)}`}
-                pinColor="#10B981"
+                title={selectedVisit.location?.name || 
+                  (selectedVisit.type === 'local_visit' ? 'Local Visit' : 'Visit Location')}
+                description={selectedVisit.type === 'local_visit' 
+                  ? `${selectedVisit.start_time instanceof Date 
+                      ? selectedVisit.start_time.toLocaleTimeString() 
+                      : 'Unknown start'} - ${selectedVisit.end_time 
+                      ? (selectedVisit.end_time instanceof Date 
+                        ? selectedVisit.end_time.toLocaleTimeString() 
+                        : 'Unknown end') 
+                      : 'Ongoing'}`
+                  : `${TimelineService.formatTime(selectedVisit.start_time)} - ${TimelineService.formatTime(selectedVisit.end_time)}`}
+                pinColor={selectedVisit.type === 'local_visit' ? "#3B82F6" : "#10B981"}
               />
             </MapView>
           )}
@@ -531,9 +714,13 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#10B981',
   },
-  travelCard: {
+  localVisitCard: {
     borderLeftWidth: 4,
     borderLeftColor: '#3B82F6',
+  },
+  travelCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#6B7280',
   },
   itemHeader: {
     marginBottom: 8,
@@ -577,6 +764,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     fontWeight: '500',
+  },
+  localVisitInfo: {
+    marginBottom: 8,
+  },
+  localVisitDetails: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 8,
   },
   expandedDetails: {
     marginTop: 12,
