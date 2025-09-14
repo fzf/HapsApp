@@ -1,5 +1,6 @@
 import LocationCacheService from './LocationCacheService';
 import { getAuthTokenForBackgroundTask } from '../AuthContext';
+import APIService from './APIService';
 import * as Sentry from '@sentry/react-native';
 import * as Network from 'expo-network';
 
@@ -229,28 +230,18 @@ class LocationSyncService {
         }))
       };
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/users/locations`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(batchData),
-        signal: createAbortSignalWithTimeout(30000) // 30 second timeout
+      // Ensure API service has the auth token
+      APIService.setCachedAuthToken(authToken);
+      
+      const response = await APIService.uploadLocations(batchData.locations, {
+        timeout: 30000 // 30 second timeout
       });
 
-      if (response.ok) {
-        const syncedIds = unsyncedLocations.map(loc => loc.id);
-        await LocationCacheService.markLocationsSynced(syncedIds);
-        result.synced = unsyncedLocations.length;
-        result.details.push(`Successfully synced ${unsyncedLocations.length} locations`);
-      } else {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        result.errors++;
-        result.details.push(`HTTP ${response.status}: ${errorText}`);
-        console.warn(`📤 Location sync failed: HTTP ${response.status}`, errorText);
-      }
+      // Success - mark locations as synced
+      const syncedIds = unsyncedLocations.map(loc => loc.id);
+      await LocationCacheService.markLocationsSynced(syncedIds);
+      result.synced = unsyncedLocations.length;
+      result.details.push(`Successfully synced ${unsyncedLocations.length} locations`);
 
     } catch (error) {
       result.errors++;

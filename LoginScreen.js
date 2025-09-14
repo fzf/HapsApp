@@ -11,12 +11,14 @@ import {
   StatusBar,
   StyleSheet,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from './AuthContext';
 import { Card, CardContent } from './components/Card';
 import { Button } from './components/Button';
 import { Alert as CustomAlert } from './components/Alert';
 
-export default function LoginScreen({ onSwitchToRegister }) {
+export default function LoginScreen() {
+  const navigation = useNavigation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,7 +116,7 @@ export default function LoginScreen({ onSwitchToRegister }) {
                 {/* Switch to Register */}
                 <Button
                   variant="ghost"
-                  onPress={onSwitchToRegister}
+                  onPress={() => navigation.navigate('Register')}
                   style={styles.switchButton}
                 >
                   <Text style={styles.switchText}>

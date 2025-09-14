@@ -7,6 +7,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "dev:ios": "expo run:ios",
     "dev:android": "expo run:android",
     "dev:ios:prod": "EXPO_PUBLIC_API_URL=https://haps.app expo run:ios",
@@ -47,7 +49,18 @@
     "react-native-screens": "^4.13.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "@testing-library/react-native": "^12.9.0",
+    "jest": "^29.7.0",
+    "jest-expo": "^53.0.0",
+    "react-test-renderer": "19.0.0"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "setupFilesAfterEnv": ["<rootDir>/jest-setup.js"],
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
+    ]
   },
   "private": true
 }
