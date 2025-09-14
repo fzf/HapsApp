@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, ScrollView, SafeAreaView, StatusBar, Platform, StyleSheet } from 'react-native';
+import { Text, View, Platform, StyleSheet } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-
-import LocationService from '../services/LocationService';
-import LocationSyncService from '../services/LocationSyncService';
-import LoggingService from '../services/LoggingService';
 import Constants from 'expo-constants';
-import * as Sentry from '@sentry/react-native';
+
+// Import services
+import { LocationService, LocationSyncService, LoggingService } from '../services';
 
 // Import components
-import { Card, CardHeader, CardTitle, CardContent } from './Card';
-import { Button } from './Button';
-import { Badge } from './Badge';
+import { Screen, Card, CardHeader, CardTitle, CardContent, Button, Badge, StatusIndicator, ErrorMessage } from '../components';
 import { BuildInfo, BuildInfoFooter } from './BuildInfo';
+
+// Import hooks and contexts
 import { useAuth } from '../AuthContext';
+import { useAppState } from '../contexts';
+import { useLocationTracking } from '../hooks';
+import { handleAsyncOperation, createErrorHandler } from '../utils';
 
 // Debug notifications configuration
 const DEBUG_NOTIFICATIONS = true;
@@ -268,32 +269,44 @@ async function startLocationTracking() {
 }
 
 const HomeScreen = () => {
-  const [locationStatus, setLocationStatus] = useState('checking');
-  const [locationTrackingDetails, setLocationTrackingDetails] = useState({
-    isTracking: false,
-    isTaskRegistered: false,
-    hasBackgroundPermission: false,
-    permissionStatus: 'unknown'
-  });
+  // State management with new patterns
   const [debugNotificationsEnabled, setDebugNotificationsEnabled] = useState(ENABLE_LOCATION_DEBUG_NOTIFICATIONS);
+  const [error, setError] = useState(null);
+  
+  // Use new hooks and contexts
   const { user, logout } = useAuth();
+  const { isOnline, canSync, syncStatus, lastSyncTime, locationPermission, isTrackingLocation } = useAppState();
+  const {
+    startTracking,
+    stopTracking,
+    getCurrentLocation,
+    syncLocations,
+    loading: locationLoading,
+    error: locationError,
+  } = useLocationTracking();
+  
+  // Create error handler for this component
+  const handleError = createErrorHandler('HomeScreen');
 
   useEffect(() => {
     const initializeLocationTracking = async () => {
-      try {
-        await startLocationTracking();
-        setLocationStatus('active');
-
-        // Get detailed tracking status
-        const trackingStatus = await getLocationTrackingStatus();
-        setLocationTrackingDetails(trackingStatus);
-      } catch (error) {
-        setLocationStatus('denied');
-        console.error('Location initialization failed:', error);
+      const result = await handleAsyncOperation(
+        async () => await startTracking(),
+        {
+          onError: (error, userMessage) => {
+            setError(userMessage);
+            console.error('Location initialization failed:', error);
+          },
+          errorContext: { operation: 'initialize_location_tracking' }
+        }
+      );
+      
+      if (result.success) {
+        console.log('Location tracking initialized successfully');
       }
     };
 
-    if (user) {
+    if (user && !isTrackingLocation) {
       initializeLocationTracking();
     }
 
@@ -329,9 +342,51 @@ const HomeScreen = () => {
     }
   };
 
+  const renderStatusCard = () => (
+    <Card style={styles.statusCard}>
+      <CardHeader>
+        <CardTitle>System Status</CardTitle>
+      </CardHeader>
+      <CardContent style={styles.statusContent}>
+        <StatusIndicator
+          status={isOnline ? 'online' : 'offline'}
+          size="md"
+          style={styles.statusItem}
+        />
+        <StatusIndicator
+          status={locationPermission ? 'synced' : 'error'}
+          title="Location Permission"
+          message={locationPermission ? 'Granted' : 'Required'}
+          size="md"
+          style={styles.statusItem}
+        />
+        <StatusIndicator
+          status={isTrackingLocation ? 'syncing' : 'error'}
+          title="Location Tracking"
+          message={isTrackingLocation ? 'Active' : 'Stopped'}
+          size="md"
+          style={styles.statusItem}
+        />
+        <StatusIndicator
+          status={syncStatus}
+          title="Data Sync"
+          message={lastSyncTime ? `Last: ${lastSyncTime.toLocaleTimeString()}` : 'Never synced'}
+          size="md"
+          style={styles.statusItem}
+        />
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f9fafb" />
+    <Screen
+      safeArea={true}
+      scrollable={true}
+      loading={locationLoading}
+      error={error || locationError}
+      onRetry={() => setError(null)}
+      errorBoundaryName="HomeScreen"
+    >
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
@@ -510,8 +565,10 @@ const HomeScreen = () => {
         <View style={styles.footer}>
           <BuildInfoFooter />
         </View>
+        {/* Add the new status card */}
+        {renderStatusCard()}
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 };
 
@@ -549,6 +606,15 @@ const styles = StyleSheet.create({
   },
   cardMargin: {
     marginBottom: 24,
+  },
+  statusCard: {
+    marginBottom: 20,
+  },
+  statusContent: {
+    gap: 12,
+  },
+  statusItem: {
+    marginBottom: 8,
   },
   cardHeaderRow: {
     flexDirection: 'row',

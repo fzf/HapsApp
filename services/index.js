@@ -1,4 +1,5 @@
 // Service exports for easy access
+export { default as APIService, APIError } from './APIService';
 export { default as LocationService } from './LocationService';
 export { default as LocationCacheService } from './LocationCacheService';
 export { default as LocationSyncService } from './LocationSyncService';
