@@ -40,6 +40,9 @@ class LocationCacheService {
   }
 
   async createTables() {
+    // Apply migrations first for existing tables
+    await this.applyMigrations();
+
     // Location cache table - stores all location points locally
     await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS cached_locations (
@@ -131,6 +134,40 @@ class LocationCacheService {
     `);
 
     console.log('📁 Database tables created successfully');
+  }
+
+  async applyMigrations() {
+    try {
+      // Check if local_timeline_segments table exists
+      const tableExists = await this.db.getFirstAsync(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name='local_timeline_segments'
+      `);
+      
+      if (tableExists) {
+        console.log('🔄 Checking local_timeline_segments table schema...');
+        
+        // Check if is_active column exists
+        const tableInfo = await this.db.getAllAsync(`PRAGMA table_info(local_timeline_segments)`);
+        const hasIsActiveColumn = tableInfo.some(column => column.name === 'is_active');
+        
+        if (!hasIsActiveColumn) {
+          console.log('🔄 Adding is_active column to local_timeline_segments table');
+          await this.db.execAsync(`
+            ALTER TABLE local_timeline_segments 
+            ADD COLUMN is_active BOOLEAN DEFAULT 0
+          `);
+          console.log('✅ Migration completed: Added is_active column');
+        } else {
+          console.log('✅ is_active column already exists');
+        }
+      } else {
+        console.log('📝 Table local_timeline_segments does not exist yet, will be created');
+      }
+    } catch (error) {
+      console.log('⚠️ Migration check failed:', error.message);
+      // Don't throw here as the table creation will handle it
+    }
   }
 
   /**

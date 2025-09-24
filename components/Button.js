@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
 
-export const Button = ({
+const Button = ({
   children,
   variant = 'primary',
   size = 'md',
@@ -106,3 +106,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+export default Button;

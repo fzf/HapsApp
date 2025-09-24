@@ -2,44 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import LoggingService from './services/LoggingService';
+import APIService, { APIError } from './services/APIService';
 
 const AuthContext = createContext();
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://haps.app');
 
-// Add network connectivity test
-const testApiConnectivity = async () => {
-  try {
-    LoggingService.info('Testing API connectivity', {
-      event_type: 'connectivity',
-      action: 'test_start',
-      api_url: API_URL
-    });
-
-    const response = await fetch(`${API_URL}/up`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      timeout: 10000
-    });
-
-    LoggingService.info('API connectivity test result', {
-      event_type: 'connectivity',
-      action: 'test_result',
-      status: response.status,
-      api_url: API_URL,
-      success: response.ok
-    });
-
-    return response.ok;
-  } catch (error) {
-    LoggingService.error('API connectivity test failed', error, {
-      event_type: 'connectivity',
-      action: 'test_failed',
-      api_url: API_URL,
-      error_message: error.message
-    });
-    return false;
-  }
+// Initialize API service with auth token when available
+const initializeAPIService = (token) => {
+  APIService.setCachedAuthToken(token);
 };
 
 // Global auth token cache for background tasks
@@ -73,11 +44,13 @@ export async function getAuthTokenForBackgroundTask() {
 // Helper function to update cached auth token
 export function updateCachedAuthToken(token) {
   CACHED_AUTH_TOKEN = token;
+  initializeAPIService(token);
 }
 
 // Helper function to clear cached auth token
 export function clearCachedAuthToken() {
   CACHED_AUTH_TOKEN = null;
+  APIService.clearCachedAuthToken();
 }
 
 export const AuthProvider = ({ children }) => {
@@ -115,46 +88,12 @@ export const AuthProvider = ({ children }) => {
         event_type: 'authentication',
         action: 'login_attempt',
         email: email,
-        api_url: API_URL
       });
 
-      // Test API connectivity first
-      const isConnected = await testApiConnectivity();
-      if (!isConnected) {
-        return {
-          success: false,
-          error: `Cannot connect to server at ${API_URL}. Please check your internet connection.`
-        };
-      }
-
-      const response = await fetch(`${API_URL}/api/sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-App-Signature': 'HapsApp-Production-v1.0',
-          'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
-        },
-        body: JSON.stringify({
-          user: {
-            email,
-            password,
-          },
-        }),
-      });
-
-      LoggingService.info('Login API response received', {
-        action: 'api_response',
-        api_url: API_URL,
-        event_type: 'authentication',
-        status: response.status,
-        status_text: response.statusText,
-      });
-
-      const data = await response.json();
+      const data = await APIService.login(email, password);
       console.log('Login response data received', data);
 
-      if (response.ok && data.token) {
+      if (data && data.token) {
         await SecureStore.setItemAsync('authToken', data.token);
         await SecureStore.setItemAsync('user', JSON.stringify(data.user));
 
@@ -174,52 +113,32 @@ export const AuthProvider = ({ children }) => {
 
         return { success: true };
       } else {
-        LoggingService.warn('Login failed', {
-          event_type: 'authentication',
-          action: 'login_failed',
-          status: response.status,
-          error: data.error || 'Login failed',
-          response_data: data
-        });
-
-        return { success: false, error: data.error || 'Login failed' };
+        return { success: false, error: 'Invalid response from server' };
       }
     } catch (error) {
-      LoggingService.error('Login network error', error, {
+      LoggingService.error('Login error', error, {
         event_type: 'authentication',
         action: 'login_error',
         email: email,
-        api_url: API_URL,
-        error_message: error.message
+        error_message: error.message,
+        error_status: error.status,
       });
 
       console.error('Login error:', error);
+      
+      if (error instanceof APIError) {
+        return { success: false, error: error.message };
+      }
+      
       return { success: false, error: `Network error: ${error.message}` };
     }
   };
 
   const register = async (email, password, passwordConfirmation) => {
     try {
-      const response = await fetch(`${API_URL}/api/registrations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-App-Signature': 'HapsApp-Production-v1.0',
-          'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
-        },
-        body: JSON.stringify({
-          user: {
-            email,
-            password,
-            password_confirmation: passwordConfirmation,
-          },
-        }),
-      });
+      const data = await APIService.register(email, password, passwordConfirmation);
 
-      const data = await response.json();
-
-      if (response.ok && data.token) {
+      if (data && data.token) {
         await SecureStore.setItemAsync('authToken', data.token);
         await SecureStore.setItemAsync('user', JSON.stringify(data.user));
 
@@ -232,10 +151,15 @@ export const AuthProvider = ({ children }) => {
 
         return { success: true };
       } else {
-        return { success: false, error: data.error || 'Registration failed' };
+        return { success: false, error: 'Invalid response from server' };
       }
     } catch (error) {
       console.error('Registration error:', error);
+      
+      if (error instanceof APIError) {
+        return { success: false, error: error.message };
+      }
+      
       return { success: false, error: 'Network error' };
     }
   };
@@ -244,15 +168,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Optional: Call logout endpoint
       if (token) {
-        await fetch(`${API_URL}/api/sessions`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-            'X-App-Signature': 'HapsApp-Production-v1.0',
-            'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
-          },
-        });
+        await APIService.logout();
       }
 
       // Clear stored credentials
@@ -277,29 +193,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const authenticatedFetch = async (url, options = {}) => {
-    if (!token) {
-      throw new Error('No authentication token available');
-    }
-
-    const defaultHeaders = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-App-Signature': 'HapsApp-Production-v1.0',
-      'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
-    };
-
-    const mergedOptions = {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    };
-
-    return fetch(url, mergedOptions);
-  };
+  // Provide direct access to authenticated API service
+  const api = APIService;
 
   const value = {
     isAuthenticated,
@@ -309,7 +204,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    authenticatedFetch,
+    api,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

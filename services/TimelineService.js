@@ -1,31 +1,19 @@
 import TimelineDatabase from './TimelineDatabase';
+import APIService from './APIService';
 
 class TimelineService {
   constructor() {
-    this.API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__
-      ? 'http://localhost:3000'
-      : 'https://haps.app'
-    );
+    // No longer need to store API_URL since we use APIService
   }
 
   async fetchTimelineForDate(date, authToken) {
     try {
       const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
-
-      const response = await fetch(`${this.API_URL}/api/timeline?date=${dateString}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Timeline API error: ${response.status}`);
-      }
-
-      const data = await response.json();
+      
+      // Ensure API service has the auth token
+      APIService.setCachedAuthToken(authToken);
+      
+      const data = await APIService.getTimelineForDate(dateString);
 
       // Handle new API format with combined timeline
       if (data.timeline) {
@@ -73,21 +61,11 @@ class TimelineService {
     try {
       const startDateString = startDate.toISOString().split('T')[0];
       const endDateString = endDate.toISOString().split('T')[0];
-
-      const response = await fetch(`${this.API_URL}/api/timeline?start_date=${startDateString}&end_date=${endDateString}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Timeline API error: ${response.status}`);
-      }
-
-      const data = await response.json();
+      
+      // Ensure API service has the auth token
+      APIService.setCachedAuthToken(authToken);
+      
+      const data = await APIService.getTimelineForDateRange(startDateString, endDateString);
 
       // Handle new API format with combined timeline
       if (data.timeline) {
