@@ -45,7 +45,7 @@ export const useLocationTracking = () => {
         throw new Error('Location permission not granted');
       }
 
-      await LocationService.startLocationTracking();
+      await LocationService.startTracking();
       setIsTracking(true);
       return true;
     } catch (err) {
@@ -58,7 +58,7 @@ export const useLocationTracking = () => {
   // Stop location tracking
   const stopTracking = useCallback(async () => {
     try {
-      await LocationService.stopLocationTracking();
+      await LocationService.stopTracking();
       setIsTracking(false);
       return true;
     } catch (err) {

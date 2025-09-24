@@ -3,8 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import TabBarIcon from './TabBarIcon';
+import HomeScreen from '../components/HomeScreen';
 import { 
-  HomeScreen, 
   MapViewScreen, 
   TimelineListScreen, 
   HeartbeatDebugScreen 

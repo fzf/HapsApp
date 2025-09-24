@@ -103,7 +103,7 @@ export const AppStateProvider = ({ children }) => {
 
     return () => {
       if (subscription) {
-        subscription();
+        subscription.remove();
       }
     };
   }, []);

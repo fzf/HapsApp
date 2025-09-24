@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Text, View, Platform, StyleSheet } from 'react-native';
+import { Text, View, Platform, StyleSheet, ScrollView } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import * as Sentry from '@sentry/react-native';
 
 // Import services
 import { LocationService, LocationSyncService, LoggingService } from '../services';
@@ -272,6 +273,13 @@ const HomeScreen = () => {
   // State management with new patterns
   const [debugNotificationsEnabled, setDebugNotificationsEnabled] = useState(ENABLE_LOCATION_DEBUG_NOTIFICATIONS);
   const [error, setError] = useState(null);
+  const [locationTrackingDetails, setLocationTrackingDetails] = useState({
+    isTracking: false,
+    isTaskRegistered: false,
+    hasBackgroundPermission: false,
+    permissionStatus: 'unknown'
+  });
+  const [locationStatus, setLocationStatus] = useState('checking');
   
   // Use new hooks and contexts
   const { user, logout } = useAuth();
@@ -290,19 +298,28 @@ const HomeScreen = () => {
 
   useEffect(() => {
     const initializeLocationTracking = async () => {
-      const result = await handleAsyncOperation(
-        async () => await startTracking(),
-        {
-          onError: (error, userMessage) => {
-            setError(userMessage);
-            console.error('Location initialization failed:', error);
-          },
-          errorContext: { operation: 'initialize_location_tracking' }
+      try {
+        const trackingStatus = await getLocationTrackingStatus();
+        setLocationTrackingDetails(trackingStatus);
+        
+        const result = await handleAsyncOperation(
+          async () => await startTracking(),
+          {
+            onError: (error, userMessage) => {
+              setError(userMessage);
+              console.error('Location initialization failed:', error);
+            },
+            errorContext: { operation: 'initialize_location_tracking' }
+          }
+        );
+        
+        if (result.success) {
+          console.log('Location tracking initialized successfully');
+          const updatedStatus = await getLocationTrackingStatus();
+          setLocationTrackingDetails(updatedStatus);
         }
-      );
-      
-      if (result.success) {
-        console.log('Location tracking initialized successfully');
+      } catch (error) {
+        console.error('Failed to get location tracking status:', error);
       }
     };
 
@@ -325,6 +342,17 @@ const HomeScreen = () => {
       api_endpoint: process.env.EXPO_PUBLIC_API_URL + '/users/locations'
     });
   }, [user]);
+
+  // Update location status based on tracking details
+  useEffect(() => {
+    if (locationTrackingDetails.hasBackgroundPermission && locationTrackingDetails.isTracking) {
+      setLocationStatus('active');
+    } else if (!locationTrackingDetails.hasBackgroundPermission) {
+      setLocationStatus('denied');
+    } else {
+      setLocationStatus('checking');
+    }
+  }, [locationTrackingDetails]);
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {

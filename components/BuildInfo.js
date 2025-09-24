@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Card, CardHeader, CardTitle, CardContent } from './Card';
-import { Badge } from './Badge';
+import Card, { CardHeader, CardTitle, CardContent } from './Card';
+import Badge from './Badge';
 
 // Import build info if available
 let buildInfo = null;
@@ -251,3 +251,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+export default BuildInfo;

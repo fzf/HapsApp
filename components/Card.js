@@ -64,3 +64,5 @@ const styles = StyleSheet.create({
     // No specific styles needed
   },
 });
+
+export default Card;
