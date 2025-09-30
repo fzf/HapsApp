@@ -13,24 +13,35 @@ const HEARTBEAT_TASK_NAME = 'background-heartbeat-task';
  */
 
 // Background location task
-TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error('❌ Background location task error:', error);
     Sentry.captureException(error, {
-      tags: { section: 'background_location', error_type: 'task_error' }
+      tags: { section: 'background_location', error_type: 'task_error' },
+      extra: { 
+        errorMessage: error.message, 
+        errorCode: error.code,
+        errorDomain: error.domain 
+      }
     });
     return;
   }
 
-  if (data) {
+  if (data && data.locations && data.locations.length > 0) {
     const { locations } = data;
-    console.log('📍 Background location received:', locations?.length || 0, 'locations');
+    console.log('📍 Background location received:', locations.length, 'locations');
     
-    // We can't directly import services here due to potential circular dependencies
-    // The LocationService will handle these through its background location handler
-    if (locations && locations.length > 0) {
-      // Just log for now - the actual handling will be done by LocationService
-      console.log('📍 Processing background locations...');
+    try {
+      // Import at runtime to avoid circular dependencies
+      const { LocationService } = await import('./services');
+      await LocationService.handleBackgroundLocations(locations);
+      console.log('✅ Background locations processed successfully');
+    } catch (importError) {
+      console.error('❌ Failed to process background locations:', importError);
+      Sentry.captureException(importError, {
+        tags: { section: 'background_location', error_type: 'processing_error' },
+        extra: { locationCount: locations.length }
+      });
     }
   }
 });

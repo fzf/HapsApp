@@ -61,15 +61,70 @@ class LocationService {
 
 
   async handleBackgroundLocations(locations) {
+    if (!locations || locations.length === 0) {
+      console.log('📍 No background locations to process');
+      return;
+    }
+
+    console.log(`📍 Processing ${locations.length} background locations`);
+    
     try {
+      let processedCount = 0;
+      let errorCount = 0;
+
       for (const location of locations) {
-        await this.processLocation(location, true);
+        try {
+          await this.processLocationWithRetry(location, true);
+          processedCount++;
+        } catch (locationError) {
+          errorCount++;
+          console.error('❌ Failed to process background location:', locationError);
+          Sentry.captureException(locationError, {
+            tags: { section: 'location_service', error_type: 'location_processing_error' },
+            extra: { 
+              latitude: location.coords?.latitude,
+              longitude: location.coords?.longitude,
+              timestamp: location.timestamp,
+              accuracy: location.coords?.accuracy
+            }
+          });
+        }
+      }
+
+      console.log(`✅ Background location processing complete: ${processedCount} processed, ${errorCount} errors`);
+      
+      if (processedCount > 0) {
+        LoggingService.location('background_batch_processed', {
+          total: locations.length,
+          processed: processedCount,
+          errors: errorCount
+        });
       }
     } catch (error) {
-      console.error('❌ Error handling background locations:', error);
+      console.error('❌ Error handling background locations batch:', error);
       Sentry.captureException(error, {
-        tags: { section: 'location_service', error_type: 'background_location_error' }
+        tags: { section: 'location_service', error_type: 'background_location_batch_error' },
+        extra: { locationCount: locations.length }
       });
+    }
+  }
+
+  async processLocationWithRetry(location, isBackground, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.processLocation(location, isBackground);
+        return; // Success
+      } catch (error) {
+        console.error(`❌ Location processing attempt ${attempt} failed:`, error);
+        
+        if (attempt === maxRetries) {
+          throw error; // Re-throw on final attempt
+        }
+        
+        // Wait before retry with exponential backoff
+        const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
 
