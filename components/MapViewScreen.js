@@ -4,7 +4,7 @@ import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 import { useAuth } from '../AuthContext';
 import TimelineService from '../services/TimelineService';
 import { VisitTrackingService } from '../services';
-import { Button } from './Button';
+import Button from './Button';
 import { Card, CardHeader, CardTitle, CardContent } from './Card';
 import { Badge } from './Badge';
 

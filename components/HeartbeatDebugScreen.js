@@ -10,7 +10,7 @@ import {
 import HeartbeatService from '../services/HeartbeatService';
 import LocationService from '../services/LocationService';
 import { Card } from './Card';
-import { Button } from './Button';
+import Button from './Button';
 
 const HeartbeatDebugScreen = () => {
   const [heartbeatStatus, setHeartbeatStatus] = useState(null);

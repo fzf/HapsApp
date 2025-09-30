@@ -14,7 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from './AuthContext';
 import { Card, CardContent } from './components/Card';
-import { Button } from './components/Button';
+import Button from './components/Button';
 import { Alert as CustomAlert } from './components/Alert';
 
 export default function RegisterScreen() {
