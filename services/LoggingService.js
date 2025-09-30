@@ -3,63 +3,40 @@ import Constants from 'expo-constants';
 
 class LoggingService {
   constructor() {
-    this.sourceToken = null;
     this.isEnabled = false;
     this.logtailUrl = 'https://s1464181.eu-nbg-2.betterstackdata.com';
-    
+    this.logtailToken = 'JEii3scJ5H39FyQAF7cbT6SE';
+
     // Set log levels based on environment
     this.logLevels = {
       error: 0,
-      warn: 1, 
+      warn: 1,
       info: 2,
       debug: 3
     };
-    
+
     // Allow all log levels in both development and production for now
     this.minLogLevel = this.logLevels.debug;
-    
+
     this.initializeLogging();
   }
 
   initializeLogging() {
     try {
-      // Select token based on environment
-      const isDev = __DEV__;
-      const extra = Constants.expoConfig?.extra;
-      
-      console.log('🔍 Environment variables:', {
-        env_token: process.env.EXPO_PUBLIC_LOGTAIL_TOKEN,
-        extra_config: extra
-      });
+      const buildType = process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown';
 
-      if (isDev) {
-        // TEMPORARY: Use production token in development for testing
-        // Switch back to dev token later: extra?.EXPO_PUBLIC_LOGTAIL_TOKEN_DEV
-        this.sourceToken = extra?.EXPO_PUBLIC_LOGTAIL_TOKEN_PROD || 
-                          extra?.EXPO_PUBLIC_LOGTAIL_TOKEN_DEV || 
-                          process.env.EXPO_PUBLIC_LOGTAIL_TOKEN ||
-                          extra?.EXPO_PUBLIC_LOGTAIL_TOKEN;
-      } else {
-        // Production: use prod token from eas.json environment variables or app.json extra
-        this.sourceToken = process.env.EXPO_PUBLIC_LOGTAIL_TOKEN ||
-                          extra?.EXPO_PUBLIC_LOGTAIL_TOKEN_PROD;
-      }
-      
-      console.log('🔍 Logtail token selection:', {
-        isDevelopment: isDev,
-        tokenSource: isDev ? 'DEV' : 'PROD',
-        tokenFound: !!this.sourceToken,
-        environment: this.getBaseContext().environment,
+      console.log('🔍 Logging service initialization:', {
+        buildType,
+        tokenFound: !!this.logtailToken,
         minLogLevel: Object.keys(this.logLevels).find(key => this.logLevels[key] === this.minLogLevel)
       });
-      
-      if (this.sourceToken) {
+
+      if (this.logtailToken) {
         this.isEnabled = true;
         const minLevel = Object.keys(this.logLevels).find(key => this.logLevels[key] === this.minLogLevel);
-        console.log(`✅ Better Stack logging service initialized (${isDev ? 'DEV' : 'PROD'} token, min level: ${minLevel})`);
+        console.log(`✅ Better Stack logging service initialized (${buildType} build, min level: ${minLevel})`);
       } else {
         console.warn('⚠️ EXPO_PUBLIC_LOGTAIL_TOKEN not found, logging disabled');
-        console.warn('Available config:', extra);
       }
     } catch (error) {
       console.error('❌ Failed to initialize logging service:', error);
@@ -72,37 +49,38 @@ class LoggingService {
       platform: Platform.OS,
       version: Platform.Version,
       app: 'HapsApp',
-      environment: __DEV__ ? 'development' : 'production'
+      environment: __DEV__ ? 'development' : 'production',
+      buildType: process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown'
     };
   }
 
   async sendToLogtail(level, message, data = {}) {
     // Always log debug info to console first
-    console.log('🔍 sendToLogtail called:', { 
-      level, 
-      message: message.substring(0, 50), 
-      enabled: this.isEnabled, 
-      hasToken: !!this.sourceToken,
-      isDev: __DEV__,
+    console.log('🔍 sendToLogtail called:', {
+      level,
+      message: message.substring(0, 50),
+      enabled: this.isEnabled,
+      hasToken: !!this.logtailToken,
+      buildType: process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown',
       minLogLevel: this.minLogLevel,
       levelValue: this.logLevels[level]
     });
 
-    if (!this.isEnabled || !this.sourceToken) {
-      console.log('🚫 Logtail disabled:', { 
-        enabled: this.isEnabled, 
-        hasToken: !!this.sourceToken,
-        tokenPreview: this.sourceToken ? `${this.sourceToken.substring(0, 8)}...` : 'none'
+    if (!this.isEnabled || !this.logtailToken) {
+      console.log('🚫 Logtail disabled:', {
+        enabled: this.isEnabled,
+        hasToken: !!this.logtailToken,
+        tokenPreview: this.logtailToken ? `${this.logtailToken.substring(0, 8)}...` : 'none'
       });
       return;
     }
 
     // Check if log level meets minimum threshold
     if (this.logLevels[level] > this.minLogLevel) {
-      console.log('🚫 Log level filtered out:', { 
-        level, 
-        levelValue: this.logLevels[level], 
-        minLogLevel: this.minLogLevel 
+      console.log('🚫 Log level filtered out:', {
+        level,
+        levelValue: this.logLevels[level],
+        minLogLevel: this.minLogLevel
       });
       return; // Skip logs below minimum level
     }
@@ -117,25 +95,25 @@ class LoggingService {
         ...data
       };
 
-      console.log('📤 Sending to Better Stack:', { 
-        message: message.substring(0, 50), 
-        level, 
+      console.log('📤 Sending to Better Stack:', {
+        message: message.substring(0, 50),
+        level,
         url: this.logtailUrl,
-        tokenPreview: `${this.sourceToken.substring(0, 8)}...`,
+        tokenPreview: `${this.logtailToken.substring(0, 8)}...`,
         bodySize: JSON.stringify(logData).length
       });
 
       const response = await fetch(this.logtailUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.sourceToken}`,
+          'Authorization': `Bearer ${this.logtailToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(logData),
       });
 
-      console.log('📥 Better Stack response:', { 
-        status: response.status, 
+      console.log('📥 Better Stack response:', {
+        status: response.status,
         statusText: response.statusText,
         ok: response.ok,
         headers: Object.fromEntries(response.headers.entries())
@@ -175,13 +153,13 @@ class LoggingService {
 
   error(message, error = null, data = {}) {
     console.error(`[ERROR] ${message}`, error, data);
-    
+
     const errorData = {
       ...data,
       error: error?.message || error,
       stack: error?.stack,
     };
-    
+
     this.sendToLogtail('error', message, errorData);
   }
 
@@ -192,7 +170,7 @@ class LoggingService {
       event,
       ...locationData
     };
-    
+
     this.info(`Location: ${event}`, logData);
   }
 
@@ -203,7 +181,7 @@ class LoggingService {
       event,
       ...syncData
     };
-    
+
     this.info(`Sync: ${event}`, logData);
   }
 
@@ -214,49 +192,53 @@ class LoggingService {
       event,
       ...taskData
     };
-    
+
     this.info(`Background: ${event}`, logData);
   }
 
   // Test method to send a test log
   async test() {
     console.log('🧪 Testing Better Stack connection...');
-    
+
+    const buildType = process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown';
+
     // Test with error level (should always get through in production)
-    await this.error('TEST: Production logging test', null, {
+    await this.error('TEST: Logging test', null, {
       test: true,
       timestamp: new Date().toISOString(),
-      buildType: __DEV__ ? 'development' : 'production'
+      buildType
     });
-    
+
     // Test with info level (might be filtered in production)
     await this.info('TEST: Info level test log', {
       test: true,
       timestamp: new Date().toISOString(),
-      buildType: __DEV__ ? 'development' : 'production'
+      buildType
     });
   }
 
   // Production-specific test that only sends error/warn level logs
   async testProduction() {
     console.log('🧪 Testing Better Stack production logging...');
-    
+
+    const buildType = process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown';
+
     // Force send an error level log (always passes production filter)
     await this.error('PROD-TEST: Force error log test', null, {
       test: true,
       test_type: 'production_forced',
       timestamp: new Date().toISOString(),
-      buildType: __DEV__ ? 'development' : 'production',
+      buildType,
       minLogLevel: this.minLogLevel,
       currentLogLevels: this.logLevels
     });
-    
+
     // Force send a warn level log (should pass production filter)
     await this.warn('PROD-TEST: Force warn log test', {
       test: true,
       test_type: 'production_forced',
       timestamp: new Date().toISOString(),
-      buildType: __DEV__ ? 'development' : 'production',
+      buildType,
       minLogLevel: this.minLogLevel,
       currentLogLevels: this.logLevels
     });
@@ -266,9 +248,9 @@ class LoggingService {
       test: true,
       test_type: 'production_filtered',
       timestamp: new Date().toISOString(),
-      buildType: __DEV__ ? 'development' : 'production'
+      buildType
     });
-    
+
     console.log('🧪 Production test completed. Check console for detailed debug output.');
   }
 
@@ -290,7 +272,8 @@ class LoggingService {
 const loggingService = new LoggingService();
 
 // Make test methods available globally for debugging
-if (__DEV__ || global.window) {
+const buildType = process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown';
+if (buildType === 'development' || buildType === 'local-dev' || global.window) {
   global.LoggingService = loggingService;
   global.testBetterStack = () => loggingService.test();
   global.testBetterStackProduction = () => loggingService.testProduction();

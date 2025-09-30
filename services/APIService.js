@@ -8,7 +8,7 @@ import LoggingService from './LoggingService';
  */
 class APIService {
   constructor() {
-    this.baseURL = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://haps.app');
+    this.baseURL = process.env.EXPO_PUBLIC_API_URL
     this.defaultHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -67,7 +67,7 @@ class APIService {
    */
   async buildHeaders(options = {}) {
     const headers = { ...this.defaultHeaders, ...options.headers };
-    
+
     if (options.authenticated !== false) {
       const token = await this.getAuthToken();
       if (token) {
@@ -175,7 +175,7 @@ class APIService {
     try {
       const response = await fetch(url, requestOptions);
       clearTimeout(timeoutId);
-      
+
       return await this.handleResponse(response, {
         endpoint,
         method,
@@ -191,7 +191,7 @@ class APIService {
           null,
           endpoint
         );
-        
+
         if (!skipLogging) {
           LoggingService.error('API request timeout', timeoutError, {
             event_type: 'api_request',
@@ -200,7 +200,7 @@ class APIService {
             timeout,
           });
         }
-        
+
         throw timeoutError;
       }
 

@@ -6,7 +6,7 @@ import APIService, { APIError } from './services/APIService';
 
 const AuthContext = createContext();
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://haps.app');
+const API_URL = process.env.EXPO_PUBLIC_API_URL
 
 // Initialize API service with auth token when available
 const initializeAPIService = (token) => {
@@ -125,11 +125,11 @@ export const AuthProvider = ({ children }) => {
       });
 
       console.error('Login error:', error);
-      
+
       if (error instanceof APIError) {
         return { success: false, error: error.message };
       }
-      
+
       return { success: false, error: `Network error: ${error.message}` };
     }
   };
@@ -155,11 +155,11 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Registration error:', error);
-      
+
       if (error instanceof APIError) {
         return { success: false, error: error.message };
       }
-      
+
       return { success: false, error: 'Network error' };
     }
   };

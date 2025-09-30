@@ -8,16 +8,16 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://haps.app",
-        "EXPO_PUBLIC_LOGTAIL_TOKEN": "Ktea8yaLu3QXeZ3Z9kj1ynA7"
+        "EXPO_PUBLIC_API_URL": "http://localhost:3000",
+        "EXPO_PUBLIC_BUILD_TYPE": "development"
       }
     },
     "local-dev": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://haps.app",
-        "EXPO_PUBLIC_LOGTAIL_TOKEN": "Ktea8yaLu3QXeZ3Z9kj1ynA7"
+        "EXPO_PUBLIC_API_URL": "http://localhost:3000",
+        "EXPO_PUBLIC_BUILD_TYPE": "local-dev"
       },
       "ios": {
         "simulator": false
@@ -27,14 +27,14 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
-        "EXPO_PUBLIC_LOGTAIL_TOKEN": "Ktea8yaLu3QXeZ3Z9kj1ynA7"
+        "EXPO_PUBLIC_BUILD_TYPE": "preview"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
-        "EXPO_PUBLIC_LOGTAIL_TOKEN": "JEii3scJ5H39FyQAF7cbT6SE"
+        "EXPO_PUBLIC_BUILD_TYPE": "production"
       },
       "ios": {
         "buildConfiguration": "Release"
@@ -44,7 +44,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
-        "EXPO_PUBLIC_LOGTAIL_TOKEN": "JEii3scJ5H39FyQAF7cbT6SE"
+        "EXPO_PUBLIC_BUILD_TYPE": "production-simulator"
       },
       "ios": {
         "simulator": true
