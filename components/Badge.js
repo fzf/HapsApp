@@ -36,6 +36,8 @@ const getTextColor = (variant) => {
       return '#a16207';
     case 'danger':
       return '#b91c1c';
+    case 'info':
+      return '#0369a1';
     case 'gray':
       return '#374151';
     case 'dark':
@@ -63,6 +65,9 @@ const styles = StyleSheet.create({
   },
   variant_danger: {
     backgroundColor: '#fee2e2',
+  },
+  variant_info: {
+    backgroundColor: '#dbeafe',
   },
   variant_gray: {
     backgroundColor: '#f3f4f6',
