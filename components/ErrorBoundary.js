@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 import Button from './Button';
 import LoggingService from '../services/LoggingService';
 
@@ -28,7 +29,17 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     // Log the error
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
+
+    // Report to Sentry
+    Sentry.captureException(error, {
+      contexts: {
+        react: {
+          componentStack: errorInfo.componentStack,
+          errorBoundary: this.props.name || 'Unknown',
+        },
+      },
+    });
+
     // Log to service
     LoggingService.error('React Error Boundary triggered', error, {
       event_type: 'react_error',
