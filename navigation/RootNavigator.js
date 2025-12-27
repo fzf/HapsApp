@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../AuthContext';
 import { Screen, LoadingSpinner } from '../components';
 import AppNavigator from './AppNavigator';
@@ -21,7 +22,11 @@ const RootNavigator = () => {
     );
   }
 
-  return isAuthenticated ? <AppNavigator /> : <AuthNavigator />;
+  return (
+    <NavigationContainer>
+      {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
+    </NavigationContainer>
+  );
 };
 
 export default RootNavigator;

@@ -97,9 +97,9 @@ class ErrorBoundary extends React.Component {
                'We encountered an unexpected error. Please try refreshing or contact support if the problem persists.'}
             </Text>
 
-            {__DEV__ && this.state.error && (
+            {this.state.error && (
               <ScrollView style={styles.debugContainer}>
-                <Text style={styles.debugTitle}>Debug Information:</Text>
+                <Text style={styles.debugTitle}>Error Details:</Text>
                 <Text style={styles.debugText}>
                   {this.state.error.toString()}
                 </Text>
