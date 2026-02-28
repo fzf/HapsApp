@@ -13,7 +13,7 @@ const HEARTBEAT_TASK_NAME = 'background-heartbeat-task';
  */
 
 // Background location task
-TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
+if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
   if (error) {
     console.error('❌ Background location task error:', error);
     Sentry.captureException(error, {
@@ -36,7 +36,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
 });
 
 // Background task for heartbeats and sync
-TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
+if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
   try {
     console.log('🔄 Background sync task executing...');
     
@@ -53,7 +53,7 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
 });
 
 // Heartbeat task
-TaskManager.defineTask(HEARTBEAT_TASK_NAME, async ({ data, error }) => {
+if (!TaskManager.isTaskDefined(HEARTBEAT_TASK_NAME)) TaskManager.defineTask(HEARTBEAT_TASK_NAME, async ({ data, error }) => {
   try {
     if (error) {
       console.error('❌ Heartbeat task error:', error);

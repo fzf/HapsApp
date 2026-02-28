@@ -16,6 +16,7 @@ class APIService {
       'User-Agent': `HapsApp/${Platform.OS === 'ios' ? 'iOS' : 'Android'}/Production`,
     };
     this.cachedAuthToken = null;
+    this.unauthorizedHandler = null;
   }
 
   /**
@@ -30,6 +31,15 @@ class APIService {
    */
   clearCachedAuthToken() {
     this.cachedAuthToken = null;
+    this.unauthorizedHandler = null;
+  }
+
+  /**
+   * Set a callback to be invoked when a 401 response is received.
+   * Used by AuthContext to trigger logout on session expiry.
+   */
+  setUnauthorizedHandler(handler) {
+    this.unauthorizedHandler = handler;
   }
 
   /**
@@ -115,6 +125,11 @@ class APIService {
     }
 
     if (!response.ok) {
+      // Notify auth context of expired/invalid session so it can log the user out
+      if (response.status === 401 && this.unauthorizedHandler) {
+        this.unauthorizedHandler();
+      }
+
       const error = new APIError(
         data?.error || data?.message || `HTTP ${response.status}`,
         response.status,

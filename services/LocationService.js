@@ -7,9 +7,11 @@ import LocationSyncService from './LocationSyncService';
 import HeartbeatService from './HeartbeatService';
 import LoggingService from './LoggingService';
 import VisitTrackingService from './VisitTrackingService';
+import NotificationService from './NotificationService';
 import * as Sentry from '@sentry/react-native';
 
-import { LOCATION_TASK_NAME, BACKGROUND_TASK_NAME } from '../taskDefinitions';
+const LOCATION_TASK_NAME = 'background-location-task';
+const BACKGROUND_TASK_NAME = 'background-sync-task';
 
 /**
  * LocationService - Modern location tracking using Expo Location
@@ -48,7 +50,8 @@ class LocationService {
       // Initialize visit tracking service
       await VisitTrackingService.initialize();
       
-      // Background tasks are pre-defined in taskDefinitions.js
+      // Define background tasks
+      this.defineBackgroundTasks();
       
       console.log('✅ LocationService initialized');
     } catch (error) {
@@ -59,6 +62,55 @@ class LocationService {
     }
   }
 
+  defineBackgroundTasks() {
+    // Background location task
+    // Guard against re-registration (e.g. dev Fast Refresh or module re-evaluation)
+    if (!TaskManager.isTaskDefined(LOCATION_TASK_NAME)) {
+      TaskManager.defineTask(LOCATION_TASK_NAME, ({ data, error }) => {
+      if (error) {
+        console.error('❌ Background location task error:', error);
+        Sentry.captureException(error, {
+          tags: { section: 'location_service', error_type: 'background_task_error' }
+        });
+        return;
+      }
+
+      if (data) {
+        const { locations } = data;
+        this.handleBackgroundLocations(locations);
+      }
+    });
+
+    } // end if(!isTaskDefined LOCATION_TASK_NAME)
+
+    // Background task for heartbeats and sync
+    if (!TaskManager.isTaskDefined(BACKGROUND_TASK_NAME)) {
+      TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
+      try {
+        console.log('🔄 Background task executing...');
+        
+        // Send heartbeat if stationary
+        await this.sendHeartbeatIfNeeded();
+        
+        // Trigger sync
+        await LocationSyncService.syncNow('background_task');
+        
+        // Perform maintenance occasionally
+        if (Math.random() < 0.1) { // 10% chance
+          await LocationSyncService.performMaintenance();
+        }
+        
+        return BackgroundTask.BackgroundTaskResult.Success;
+      } catch (error) {
+        console.error('❌ Background task error:', error);
+        Sentry.captureException(error, {
+          tags: { section: 'location_service', error_type: 'background_task_error' }
+        });
+        return BackgroundTask.BackgroundTaskResult.Failed;
+      }
+    });
+    } // end if(!isTaskDefined BACKGROUND_TASK_NAME)
+  }
 
   async handleBackgroundLocations(locations) {
     try {
@@ -84,8 +136,12 @@ class LocationService {
       
       // Update activity tracking
       if (this.currentActivity !== detectedActivity) {
+        const oldActivity = this.currentActivity;
         this.currentActivity = detectedActivity;
         LocationSyncService.updateActivity(detectedActivity);
+        
+        // Trigger notification for activity change
+        NotificationService.onActivityChanged(oldActivity, detectedActivity, location);
       }
       
       // Get battery information
@@ -179,41 +235,6 @@ class LocationService {
     } catch (error) {
       return null;
     }
-  }
-
-  async checkLocationPermission() {
-    try {
-      const foregroundPermission = await Location.getForegroundPermissionsAsync();
-      const backgroundPermission = await Location.getBackgroundPermissionsAsync();
-      
-      this.permissionsGranted = foregroundPermission.status === 'granted' && 
-                                backgroundPermission.status === 'granted';
-      
-      return this.permissionsGranted;
-    } catch (error) {
-      console.error('❌ Error checking location permissions:', error);
-      Sentry.captureException(error, {
-        tags: { section: 'location_service', error_type: 'permission_check_error' }
-      });
-      return false;
-    }
-  }
-
-  async isLocationTrackingActive() {
-    try {
-      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
-      return this.isTracking && isTaskRegistered;
-    } catch (error) {
-      console.error('❌ Error checking location tracking status:', error);
-      Sentry.captureException(error, {
-        tags: { section: 'location_service', error_type: 'tracking_status_error' }
-      });
-      return false;
-    }
-  }
-
-  async requestLocationPermission() {
-    return await this.requestPermissions();
   }
 
   async requestPermissions() {
@@ -408,6 +429,31 @@ class LocationService {
         tags: { section: 'location_service', error_type: 'get_location_error' }
       });
       throw error;
+    }
+  }
+
+  async checkLocationPermission() {
+    try {
+      const foreground = await Location.getForegroundPermissionsAsync();
+      const background = await Location.getBackgroundPermissionsAsync();
+      
+      const hasPermission = foreground.granted && background.granted;
+      this.permissionsGranted = hasPermission;
+      
+      return hasPermission;
+    } catch (error) {
+      console.error('❌ Error checking location permission:', error);
+      return false;
+    }
+  }
+
+  async isLocationTrackingActive() {
+    try {
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
+      return this.isTracking && isTaskRegistered;
+    } catch (error) {
+      console.error('❌ Error checking location tracking status:', error);
+      return false;
     }
   }
 

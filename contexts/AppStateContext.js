@@ -170,7 +170,7 @@ export const AppStateProvider = ({ children }) => {
     // Resume heartbeat service if it was running
     if (state.heartbeatStatus === 'active') {
       try {
-        await HeartbeatService.start();
+        await HeartbeatService.startHeartbeat();
       } catch (error) {
         LoggingService.error('Failed to resume heartbeat service', error);
       }

@@ -9,7 +9,7 @@ import LoggingService from './LoggingService';
 import * as Sentry from '@sentry/react-native';
 import * as Network from 'expo-network';
 
-import { HEARTBEAT_TASK_NAME } from '../taskDefinitions';
+const HEARTBEAT_TASK_NAME = 'heartbeat-location-task';
 const HEARTBEAT_STORAGE_KEY = '@haps_last_heartbeat';
 const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -41,7 +41,8 @@ class HeartbeatService {
       // Load last heartbeat time from storage
       await this.loadLastHeartbeatTime();
 
-      // Background heartbeat task is pre-defined in taskDefinitions.js
+      // Define the background heartbeat task
+      this.defineHeartbeatTask();
 
       console.log('✅ HeartbeatService initialized');
     } catch (error) {
@@ -52,6 +53,34 @@ class HeartbeatService {
     }
   }
 
+  defineHeartbeatTask() {
+    // Guard against re-registration (e.g. dev Fast Refresh or module re-evaluation)
+    if (TaskManager.isTaskDefined(HEARTBEAT_TASK_NAME)) {
+      console.log('ℹ️ Heartbeat task already defined, skipping re-registration');
+      return;
+    }
+    TaskManager.defineTask(HEARTBEAT_TASK_NAME, async ({ data, error }) => {
+      if (error) {
+        console.error('❌ Heartbeat task error:', error);
+        Sentry.captureException(error, {
+          tags: { section: 'heartbeat_service', error_type: 'background_task_error' }
+        });
+        return BackgroundTask.BackgroundTaskResult.Failed;
+      }
+
+      try {
+        console.log('💓 Heartbeat task executing...');
+        await this.executeHeartbeat();
+        return BackgroundTask.BackgroundTaskResult.Success;
+      } catch (taskError) {
+        console.error('❌ Heartbeat task execution error:', taskError);
+        Sentry.captureException(taskError, {
+          tags: { section: 'heartbeat_service', error_type: 'task_execution_error' }
+        });
+        return BackgroundTask.BackgroundTaskResult.Failed;
+      }
+    });
+  }
 
   async loadLastHeartbeatTime() {
     try {
