@@ -2,7 +2,7 @@
   "expo": {
     "name": "HapsApp",
     "slug": "HapsApp",
-    "version": "1.0.4",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -32,7 +32,8 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.fzf.HapsApp"
+      "bundleIdentifier": "com.fzf.HapsApp",
+      "buildNumber": "3"
     },
     "android": {
       "adaptiveIcon": {
@@ -45,7 +46,8 @@
         "ACCESS_BACKGROUND_LOCATION",
         "WAKE_LOCK"
       ],
-      "package": "com.fzf.HapsApp"
+      "package": "com.fzf.HapsApp",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -57,7 +59,7 @@
       "EXPO_PUBLIC_LOGTAIL_TOKEN_DEV": "Ktea8yaLu3QXeZ3Z9kj1ynA7",
       "EXPO_PUBLIC_LOGTAIL_TOKEN_PROD": "JEii3scJ5H39FyQAF7cbT6SE"
     },
-        "plugins": [
+    "plugins": [
       [
         "expo-gradle-ext-vars",
         {

@@ -49,3 +49,4 @@ build/
 
 .env.local
 .env
+ios/.xcode.env.local
