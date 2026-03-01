@@ -18,7 +18,11 @@
     "build": "./scripts/build-and-submit.sh --skip-credentials",
     "build:submit": "./scripts/build-and-submit.sh --auto-submit",
     "build:android": "./scripts/build-and-submit.sh --platform android --auto-submit",
-    "build:clean": "./scripts/build-and-submit.sh --force-clean"
+    "build:clean": "./scripts/build-and-submit.sh --force-clean",
+    "build:local": "./scripts/local-build.sh --skip-prebuild",
+    "build:local:clean": "./scripts/local-build.sh --clean",
+    "testflight": "./scripts/local-build.sh --skip-prebuild --submit",
+    "testflight:fresh": "./scripts/local-build.sh --submit"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.1.2",
@@ -57,7 +61,9 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "setupFilesAfterEnv": ["<rootDir>/jest-setup.js"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest-setup.js"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
     ]
