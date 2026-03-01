@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 // Import task definitions early to ensure background tasks are defined
 import './taskDefinitions';
 import { AuthProvider } from './AuthContext';
 import { AppStateProvider } from './contexts';
 import { ErrorBoundary } from './components';
 import { RootNavigator } from './navigation';
+import { NotificationService } from './services';
 
 export default function App() {
+  useEffect(() => {
+    // Initialize notification service on app start
+    NotificationService.initialize();
+  }, []);
+
   return (
     <ErrorBoundary
       name="App Root"

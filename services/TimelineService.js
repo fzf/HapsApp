@@ -6,9 +6,25 @@ class TimelineService {
     // No longer need to store API_URL since we use APIService
   }
 
+
+  /**
+   * Convert a Date object to a YYYY-MM-DD string in the device's LOCAL timezone.
+   *
+   * Why not toISOString().split('T')[0]?
+   * toISOString() always returns UTC. In timezones west of UTC (e.g. EST = UTC-5),
+   * after ~7pm local time it's already the next calendar day in UTC, so you'd
+   * fetch the wrong day's timeline. This helper uses local year/month/day instead.
+   */
+  toLocalDateString(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   async fetchTimelineForDate(date, authToken) {
     try {
-      const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const dateString = this.toLocalDateString(date); // YYYY-MM-DD format
       
       // Ensure API service has the auth token
       APIService.setCachedAuthToken(authToken);
@@ -41,13 +57,13 @@ class TimelineService {
       console.error('Failed to fetch timeline from API:', error);
 
       // Fallback to local data if API fails
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = this.toLocalDateString(date);
       const localData = await TimelineDatabase.getTimelineForDate(dateString);
       if (localData.visits.length > 0 || localData.travels.length > 0) {
         console.log('Using cached timeline data');
         return {
           date: dateString,
-          timezone: 'UTC', // Default since we don't have this info locally
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use device timezone as best fallback
           ...localData,
           fromCache: true
         };
@@ -59,8 +75,8 @@ class TimelineService {
 
   async fetchTimelineForDateRange(startDate, endDate, authToken) {
     try {
-      const startDateString = startDate.toISOString().split('T')[0];
-      const endDateString = endDate.toISOString().split('T')[0];
+      const startDateString = this.toLocalDateString(startDate);
+      const endDateString = this.toLocalDateString(endDate);
       
       // Ensure API service has the auth token
       APIService.setCachedAuthToken(authToken);
@@ -88,7 +104,7 @@ class TimelineService {
   }
 
   async getTimelineForDate(date, authToken) {
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = this.toLocalDateString(date);
 
     try {
       // Try to get fresh data from API
@@ -101,7 +117,7 @@ class TimelineService {
       if (localData.visits.length > 0 || localData.travels.length > 0) {
         return {
           date: dateString,
-          timezone: 'UTC',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           ...localData,
           fromCache: true
         };
@@ -110,7 +126,7 @@ class TimelineService {
       // No data available
       return {
         date: dateString,
-        timezone: 'UTC',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         visits: [],
         travels: [],
         fromCache: false,
@@ -128,7 +144,7 @@ class TimelineService {
 
       promises.push(
         this.fetchTimelineForDate(date, authToken).catch(error => {
-          console.warn(`Failed to sync timeline for ${date.toISOString().split('T')[0]}:`, error);
+          console.warn(`Failed to sync timeline for ${this.toLocalDateString(date)}:`, error);
         })
       );
     }

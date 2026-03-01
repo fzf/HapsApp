@@ -1,5 +1,6 @@
 import LocationCacheService from './LocationCacheService';
 import LoggingService from './LoggingService';
+import NotificationService from './NotificationService';
 import * as Sentry from '@sentry/react-native';
 
 /**
@@ -286,6 +287,22 @@ class VisitTrackingService {
         confidence,
         locationCount: cluster.length
       });
+
+      // Trigger arrival notification
+      const mockLocation = {
+        coords: {
+          latitude: center.latitude,
+          longitude: center.longitude,
+        }
+      };
+      
+      const visit = {
+        id: visitId,
+        name: null, // Could be enhanced with reverse geocoding
+        address: null, // Could be enhanced with reverse geocoding
+      };
+      
+      NotificationService.onVisitDetected(visit, mockLocation);
 
     } catch (error) {
       console.error('❌ Error creating new visit:', error);

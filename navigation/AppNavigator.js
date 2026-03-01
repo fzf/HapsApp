@@ -7,6 +7,7 @@ import HomeScreen from '../components/HomeScreen';
 import { 
   MapViewScreen, 
   TimelineListScreen, 
+  SettingsScreen,
   HeartbeatDebugScreen 
 } from '../components';
 
@@ -56,6 +57,15 @@ const AppNavigator = () => {
           options={{
             tabBarIcon: ({ color, size, focused }) => (
               <TabBarIcon name="timeline" color={color} size={size} focused={focused} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            tabBarIcon: ({ color, size, focused }) => (
+              <TabBarIcon name="settings" color={color} size={size} focused={focused} />
             ),
           }}
         />

@@ -7,3 +7,4 @@ export { default as HeartbeatService } from './HeartbeatService';
 export { default as LoggingService } from './LoggingService';
 export { default as TimelineService } from './TimelineService';
 export { default as VisitTrackingService } from './VisitTrackingService';
+export { default as NotificationService } from './NotificationService';

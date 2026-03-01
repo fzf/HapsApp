@@ -145,16 +145,29 @@ const TimelineListScreen = () => {
     const isTravel = item.type === 'travel';
     const isExpanded = expandedItems.has(`${item.type}-${item.id}`);
 
+    // Use the timezone from the API response so times display correctly
+    // regardless of the device's local timezone.
+    const timelineTimezone = timeline?.timezone || null;
+
     const formatTime = (time) => {
       if (!time) return 'Unknown';
       if (time instanceof Date) {
-        return time.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
+        // Local visit timestamps are already in device-local time (Date objects)
+        return time.toLocaleTimeString('en-US', {
+          hour: '2-digit',
           minute: '2-digit',
-          hour12: false 
+          hour12: false,
         });
       }
-      return TimelineService.formatTime(time);
+      return TimelineService.formatTime(time, timelineTimezone);
+    };
+
+    const formatDateTime = (time) => {
+      if (!time) return 'Unknown';
+      if (time instanceof Date) {
+        return time.toLocaleString('en-US');
+      }
+      return TimelineService.formatDateTime(time, timelineTimezone);
     };
 
     const formatDuration = (duration) => {
@@ -233,7 +246,7 @@ const TimelineListScreen = () => {
                     <Text style={styles.detailValue}>
                       {isLocalVisit && item.start_time instanceof Date 
                         ? item.start_time.toLocaleString('en-US') 
-                        : TimelineService.formatDateTime(item.start_time)}
+                        : formatDateTime(item.start_time)}
                     </Text>
                   </View>
                   <View style={styles.detailItem}>
@@ -242,7 +255,7 @@ const TimelineListScreen = () => {
                       {item.end_time 
                         ? (isLocalVisit && item.end_time instanceof Date 
                           ? item.end_time.toLocaleString('en-US') 
-                          : TimelineService.formatDateTime(item.end_time))
+                          : formatDateTime(item.end_time))
                         : 'Ongoing'}
                     </Text>
                   </View>
@@ -581,7 +594,7 @@ const TimelineListScreen = () => {
                         ? selectedVisit.end_time.toLocaleTimeString() 
                         : 'Unknown end') 
                       : 'Ongoing'}`
-                  : `${TimelineService.formatTime(selectedVisit.start_time)} - ${TimelineService.formatTime(selectedVisit.end_time)}`}
+                  : `${TimelineService.formatTime(selectedVisit.start_time, timeline?.timezone)} - ${TimelineService.formatTime(selectedVisit.end_time, timeline?.timezone)}`}
                 pinColor={selectedVisit.type === 'local_visit' ? "#3B82F6" : "#10B981"}
               />
             </MapView>
@@ -601,7 +614,7 @@ const TimelineListScreen = () => {
                   <View style={styles.modalDetailColumn}>
                     <Text style={styles.modalDetailLabel}>Time</Text>
                     <Text style={styles.modalDetailValue}>
-                      {TimelineService.formatTime(selectedVisit.start_time)} - {TimelineService.formatTime(selectedVisit.end_time)}
+                      {TimelineService.formatTime(selectedVisit.start_time, timeline?.timezone)} - {TimelineService.formatTime(selectedVisit.end_time, timeline?.timezone)}
                     </Text>
                   </View>
                 </View>

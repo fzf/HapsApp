@@ -13,7 +13,8 @@
       "mcp__rails-mcp-server__analyze_models",
       "mcp__rails-mcp-server__get_file",
       "mcp__rails-mcp-server__get_schema",
-      "mcp__rails-mcp-server__switch_project"
+      "mcp__rails-mcp-server__switch_project",
+      "WebSearch"
     ],
     "deny": []
   }
