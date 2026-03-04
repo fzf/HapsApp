@@ -12,6 +12,7 @@ const MapViewScreen = () => {
   const [timeline, setTimeline] = useState(null);
   const [localVisits, setLocalVisits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showLocalVisits, setShowLocalVisits] = useState(true);
   const [mapRegion, setMapRegion] = useState({
@@ -47,9 +48,9 @@ const MapViewScreen = () => {
         const bounds = TimelineService.getTimelineBounds(timelineData);
         setMapRegion(bounds);
       }
-    } catch (error) {
-      console.error('Failed to load timeline data:', error);
-      Alert.alert('Error', 'Failed to load timeline data');
+    } catch (err) {
+      console.error('[MapView] Failed to load timeline data:', err?.message || err);
+      setError(err?.message || 'Failed to load timeline data');
     } finally {
       setLoading(false);
     }
@@ -475,6 +476,10 @@ const MapViewScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  errorText: { fontSize: 15, color: '#dc2626', textAlign: 'center', marginBottom: 16 },
+  retryBtn: { backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 },
+  retryText: { color: '#fff', fontWeight: '600' },
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',

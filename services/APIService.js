@@ -188,7 +188,9 @@ class APIService {
     requestOptions.signal = controller.signal;
 
     try {
+      console.log(`[API] ${method} ${endpoint}`);
       const response = await fetch(url, requestOptions);
+      console.log(`[API] ${method} ${endpoint} → ${response.status}`);
       clearTimeout(timeoutId);
       
       return await this.handleResponse(response, {

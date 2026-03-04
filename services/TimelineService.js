@@ -31,28 +31,31 @@ class TimelineService {
       
       const data = await APIService.getTimelineForDate(dateString);
 
-      // Handle new API format with combined timeline
-      if (data.timeline) {
-        // Convert combined timeline to separate visits and travels for backward compatibility
-        const visits = data.timeline.filter(item => item.type === 'visit');
-        const travels = data.timeline.filter(item => item.type === 'travel');
-
-        const convertedData = {
+      // Normalize response — ensure visits/travels are always arrays regardless
+      // of whether the API uses the "new" combined timeline or "old" separate arrays format.
+      let normalized;
+      if (data.timeline && Array.isArray(data.timeline)) {
+        // New format: combined timeline array with type field
+        normalized = {
           ...data,
-          visits: visits,
-          travels: travels
+          visits:  data.timeline.filter(item => item.type === 'visit'),
+          travels: data.timeline.filter(item => item.type === 'travel'),
         };
-
-        // Save to local database
-        await TimelineDatabase.saveTimelineData(dateString, convertedData);
-
-        return convertedData;
       } else {
-        // Save to local database (old format)
-        await TimelineDatabase.saveTimelineData(dateString, data);
-
-        return data;
+        // Old format: separate visits/travels arrays (ensure they exist)
+        normalized = {
+          ...data,
+          visits:  Array.isArray(data.visits)  ? data.visits  : [],
+          travels: Array.isArray(data.travels) ? data.travels : [],
+        };
       }
+
+      console.log(`[Timeline] ${dateString}: ${normalized.visits.length} visits, ${normalized.travels.length} travels`);
+
+      // Save to local database
+      await TimelineDatabase.saveTimelineData(dateString, normalized);
+
+      return normalized;
     } catch (error) {
       console.error('Failed to fetch timeline from API:', error);
 
@@ -64,6 +67,8 @@ class TimelineService {
         return {
           date: dateString,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Use device timezone as best fallback
+          visits:  Array.isArray(localData.visits)  ? localData.visits  : [],
+          travels: Array.isArray(localData.travels) ? localData.travels : [],
           ...localData,
           fromCache: true
         };
@@ -118,6 +123,8 @@ class TimelineService {
         return {
           date: dateString,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          visits:  Array.isArray(localData.visits)  ? localData.visits  : [],
+          travels: Array.isArray(localData.travels) ? localData.travels : [],
           ...localData,
           fromCache: true
         };

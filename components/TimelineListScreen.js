@@ -41,6 +41,7 @@ const TimelineListScreen = () => {
       setLoading(true);
       const timelineData = await TimelineService.getTimelineForDate(selectedDate, token);
       setTimeline(timelineData);
+      setError(null);
     } catch (error) {
       console.error('Failed to load timeline data:', error);
       Alert.alert('Error', 'Failed to load timeline data');
@@ -440,6 +441,17 @@ const TimelineListScreen = () => {
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
         <Text style={styles.loadingText}>Loading timeline...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !timeline) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <Text style={{fontSize: 15, color: '#dc2626', textAlign: 'center', padding: 20}}>
+          ⚠️ {error}
+        </Text>
+        <Button variant="outline" onPress={loadTimelineData}>🔄 Retry</Button>
       </SafeAreaView>
     );
   }
