@@ -107,4 +107,5 @@ const styles = StyleSheet.create({
   },
 });
 
+export { Button };
 export default Button;

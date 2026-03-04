@@ -102,18 +102,20 @@ class ErrorBoundary extends React.Component {
 
             <View style={styles.actions}>
               <Button
-                title="Try Again"
                 onPress={this.handleRetry}
                 style={styles.retryButton}
-              />
+              >
+                Try Again
+              </Button>
               
               {this.props.showReportButton && (
                 <Button
-                  title="Report Issue"
                   onPress={this.handleReportError}
-                  style={[styles.button, styles.reportButton]}
-                  textStyle={styles.reportButtonText}
-                />
+                  variant="outline"
+                  style={styles.reportButton}
+                >
+                  Report Issue
+                </Button>
               )}
             </View>
           </View>
