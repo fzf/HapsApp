@@ -33,7 +33,7 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.fzf.HapsApp",
-      "buildNumber": "5"
+      "buildNumber": "10"
     },
     "android": {
       "adaptiveIcon": {
