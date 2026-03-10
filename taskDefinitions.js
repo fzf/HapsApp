@@ -2,99 +2,87 @@ import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
 import * as Sentry from '@sentry/react-native';
 
-// Task names - keep in sync with service files
-const LOCATION_TASK_NAME = 'background-location-task';
-const BACKGROUND_TASK_NAME = 'background-sync-task';
-const HEARTBEAT_TASK_NAME = 'background-heartbeat-task';
+// Task names — imported by LocationService and HeartbeatService
+export const LOCATION_TASK_NAME   = 'background-location-task';
+export const BACKGROUND_TASK_NAME = 'background-sync-task';
+export const HEARTBEAT_TASK_NAME  = 'background-heartbeat-task';
 
 /**
- * Define all background tasks here to ensure they're available when needed
- * This file should be imported early in the app lifecycle
+ * All background task handlers must be defined at module evaluation time
+ * (before the app registers), so this file is imported early in App.js.
+ *
+ * Services are loaded via require() inside each handler to avoid circular
+ * dependencies and to ensure they are fully initialised before being called.
+ *
+ * Do NOT use `await import()` here — dynamic ESM imports are unreliable in
+ * React Native background contexts (Metro bundles everything synchronously).
  */
 
-// Background location task
+// ─── Background location updates ────────────────────────────────────────────
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
-    console.error('❌ Background location task error:', error);
+    console.error('[BG:location] Task error:', error.message);
     Sentry.captureException(error, {
       tags: { section: 'background_location', error_type: 'task_error' },
-      extra: { 
-        errorMessage: error.message, 
-        errorCode: error.code,
-        errorDomain: error.domain 
-      }
     });
     return;
   }
 
-  if (data && data.locations && data.locations.length > 0) {
-    const { locations } = data;
-    console.log('📍 Background location received:', locations.length, 'locations');
-    
-    try {
-      // Import at runtime to avoid circular dependencies
-      const { LocationService } = await import('./services');
-      await LocationService.handleBackgroundLocations(locations);
-      console.log('✅ Background locations processed successfully');
-    } catch (importError) {
-      console.error('❌ Failed to process background locations:', importError);
-      Sentry.captureException(importError, {
-        tags: { section: 'background_location', error_type: 'processing_error' },
-        extra: { locationCount: locations.length }
-      });
-    }
+  if (!data?.locations?.length) return;
+
+  try {
+    const LocationService = require('./services/LocationService').default;
+    await LocationService.handleBackgroundLocations(data.locations);
+    console.log('[BG:location] Processed', data.locations.length, 'location(s)');
+  } catch (err) {
+    console.error('[BG:location] Failed to process locations:', err.message);
+    Sentry.captureException(err, {
+      tags: { section: 'background_location', error_type: 'processing_error' },
+      extra: { locationCount: data.locations.length },
+    });
   }
 });
 
-// Background task for heartbeats and sync
+// ─── Periodic background sync (uploads cached locations + heartbeats) ────────
 TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
   try {
-    console.log('🔄 Background sync task executing...');
-    
-    // Return success for now - the actual sync logic will be handled by services
-    // when they detect this task running
+    console.log('[BG:sync] Task executing...');
+    const LocationSyncService = require('./services/LocationSyncService').default;
+    await LocationSyncService.syncNow('background_task');
+    console.log('[BG:sync] Sync complete');
     return BackgroundTask.BackgroundTaskResult.Success;
-  } catch (error) {
-    console.error('❌ Background sync task error:', error);
-    Sentry.captureException(error, {
-      tags: { section: 'background_sync', error_type: 'task_error' }
+  } catch (err) {
+    console.error('[BG:sync] Sync failed:', err.message);
+    Sentry.captureException(err, {
+      tags: { section: 'background_sync', error_type: 'task_error' },
     });
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
 
-// Heartbeat task
-TaskManager.defineTask(HEARTBEAT_TASK_NAME, async ({ data, error }) => {
-  try {
-    if (error) {
-      console.error('❌ Heartbeat task error:', error);
-      Sentry.captureException(error, {
-        tags: { section: 'heartbeat', error_type: 'task_error' }
-      });
-      return;
-    }
-
-    console.log('💓 Heartbeat task executed');
-    
-    // Return success - actual heartbeat logic handled by HeartbeatService
-    return;
-  } catch (error) {
-    console.error('❌ Heartbeat task execution error:', error);
+// ─── Heartbeat (ensures a location ping is sent every ~30 min) ───────────────
+TaskManager.defineTask(HEARTBEAT_TASK_NAME, async ({ error }) => {
+  if (error) {
+    console.error('[BG:heartbeat] Task error:', error.message);
     Sentry.captureException(error, {
-      tags: { section: 'heartbeat', error_type: 'execution_error' }
+      tags: { section: 'heartbeat', error_type: 'task_error' },
     });
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
+
+  try {
+    console.log('[BG:heartbeat] Task executing...');
+    const HeartbeatService = require('./services/HeartbeatService').default;
+    await HeartbeatService.executeHeartbeat();
+    console.log('[BG:heartbeat] Complete');
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (err) {
+    console.error('[BG:heartbeat] Failed:', err.message);
+    Sentry.captureException(err, {
+      tags: { section: 'heartbeat', error_type: 'execution_error' },
+    });
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
 
-console.log('✅ Background tasks defined:', {
-  location: LOCATION_TASK_NAME,
-  background: BACKGROUND_TASK_NAME,
-  heartbeat: HEARTBEAT_TASK_NAME
-});
-
-// Export task names for use by services
-export {
-  LOCATION_TASK_NAME,
-  BACKGROUND_TASK_NAME,
-  HEARTBEAT_TASK_NAME
-};
+console.log('[Tasks] Registered:', LOCATION_TASK_NAME, BACKGROUND_TASK_NAME, HEARTBEAT_TASK_NAME);
