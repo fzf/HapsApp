@@ -32,7 +32,8 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.fzf.HapsApp"
+      "bundleIdentifier": "com.fzf.HapsApp",
+      "buildNumber": "12"
     },
     "android": {
       "adaptiveIcon": {
@@ -57,7 +58,7 @@
       "EXPO_PUBLIC_LOGTAIL_TOKEN_DEV": "Ktea8yaLu3QXeZ3Z9kj1ynA7",
       "EXPO_PUBLIC_LOGTAIL_TOKEN_PROD": "JEii3scJ5H39FyQAF7cbT6SE"
     },
-        "plugins": [
+    "plugins": [
       [
         "expo-gradle-ext-vars",
         {

@@ -221,14 +221,14 @@ class HeartbeatService {
         type: 'guaranteed_heartbeat',
         interval_ms: HEARTBEAT_INTERVAL_MS,
         location_source: locationSource,
-        location: location ? {
+        location: (location && location.coords) ? {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-          accuracy: location.coords.accuracy,
-          altitude: location.coords.altitude,
-          altitude_accuracy: location.coords.altitudeAccuracy,
-          speed: location.coords.speed,
-          heading: location.coords.heading,
+          accuracy: location.coords.accuracy ?? null,
+          altitude: location.coords.altitude ?? null,
+          altitude_accuracy: location.coords.altitudeAccuracy ?? null,
+          speed: location.coords.speed ?? null,
+          heading: location.coords.heading ?? null,
           timestamp: location.timestamp
         } : null,
         activity: {

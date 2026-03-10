@@ -264,7 +264,7 @@ class LocationCacheService {
         activity?.type || null,
         activity?.confidence || null,
         odometer || null,
-        location && location.coords.speed > 0.5 ? 1 : 0,
+        location?.coords?.speed > 0.5 ? 1 : 0,
         enabled ? 1 : 0,
         unixTimestamp,
         JSON.stringify(heartbeatData)
