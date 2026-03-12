@@ -382,23 +382,23 @@ const HomeScreen = () => {
           style={styles.statusItem}
         />
         <StatusIndicator
-          status={locationPermission ? 'synced' : 'error'}
+          status={locationPermission === null ? 'syncing' : locationPermission ? 'synced' : 'error'}
           title="Location Permission"
-          message={locationPermission ? 'Granted' : 'Required'}
+          message={locationPermission === null ? 'Checking...' : locationPermission ? 'Granted (Always)' : 'Required — tap to fix'}
           size="md"
           style={styles.statusItem}
         />
         <StatusIndicator
-          status={isTrackingLocation ? 'syncing' : 'error'}
+          status={isTrackingLocation ? 'synced' : locationPermission === false ? 'error' : 'syncing'}
           title="Location Tracking"
-          message={isTrackingLocation ? 'Active' : 'Stopped'}
+          message={isTrackingLocation ? 'Active' : locationPermission === false ? 'Permission denied' : 'Starting...'}
           size="md"
           style={styles.statusItem}
         />
         <StatusIndicator
-          status={syncStatus}
+          status={syncStatus === 'success' ? 'synced' : syncStatus === 'error' ? 'error' : syncStatus === 'syncing' ? 'syncing' : lastSyncTime ? 'synced' : 'syncing'}
           title="Data Sync"
-          message={lastSyncTime ? `Last: ${lastSyncTime.toLocaleTimeString()}` : 'Never synced'}
+          message={lastSyncTime ? `Synced ${lastSyncTime.toLocaleTimeString()}` : syncStatus === 'syncing' ? 'Syncing...' : 'Waiting for data...'}
           size="md"
           style={styles.statusItem}
         />

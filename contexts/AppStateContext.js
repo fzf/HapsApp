@@ -124,7 +124,13 @@ export const AppStateProvider = ({ children }) => {
   // Check location tracking status
   const checkLocationTracking = async () => {
     try {
-      const isTracking = await LocationService.isLocationTrackingActive();
+      // Check if the background location task is registered with the OS
+      // (more reliable than in-memory flag which resets on cold start)
+      const TaskManager = require('expo-task-manager');
+      const { LOCATION_TASK_NAME } = require('../taskDefinitions');
+      const isTaskRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME).catch(() => false);
+      const isServiceTracking = await LocationService.isLocationTrackingActive();
+      const isTracking = isTaskRegistered || isServiceTracking;
       dispatch({ type: 'SET_LOCATION_TRACKING', payload: isTracking });
       return isTracking;
     } catch (error) {
@@ -195,6 +201,13 @@ export const AppStateProvider = ({ children }) => {
     };
 
     initializeAppState();
+  }, []);
+
+  // Register a global callback so LocationSyncService can update sync status
+  // without importing the context (avoids circular deps)
+  React.useEffect(() => {
+    AppStateContext._updateSyncStatus = updateSyncStatus;
+    return () => { AppStateContext._updateSyncStatus = null; };
   }, []);
 
   const value = {

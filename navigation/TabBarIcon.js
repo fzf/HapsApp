@@ -12,6 +12,7 @@ const TabBarIcon = ({ name, color, size, focused }) => {
       map: '🗺️',
       timeline: '📋',
       debug: '💓',
+      transactions: '💳',
       settings: '⚙️',
       profile: '👤',
       search: '🔍',
