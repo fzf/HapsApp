@@ -30,7 +30,7 @@ export function BuildInfo({ style }) {
 
   // Use environment variables if available, fallback to build info file, then defaults
   const envInfo = getEnvBuildInfo();
-  const info = envInfo.git.ref ? envInfo : buildInfo;
+  const info = envInfo;
 
   if (!info || !info.git.ref || info.git.ref === 'unknown') {
     // Fallback for development or when git info is not available
@@ -153,7 +153,7 @@ export function BuildInfo({ style }) {
 export function BuildInfoFooter({ style }) {
   // Simple footer version for minimal display
   const envInfo = getEnvBuildInfo();
-  const info = envInfo.git.ref ? envInfo : buildInfo;
+  const info = envInfo;
 
   if (!info || !info.git.ref || info.git.ref === 'unknown') {
     return (
