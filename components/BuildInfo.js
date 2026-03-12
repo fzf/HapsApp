@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
+import Constants from 'expo-constants';
 import Card, { CardHeader, CardTitle, CardContent } from './Card';
 import Badge from './Badge';
 
-// Import build info if available
-let buildInfo = null;
-try {
-  buildInfo = require('../build-info.json');
-} catch (error) {
-  // Build info not available (development mode or build hasn't run)
-}
+// Real version from app.json / Info.plist via expo-constants
+const APP_VERSION = Constants.expoConfig?.version ?? Constants.manifest?.version ?? '1.0.0';
+const BUILD_NUMBER = Constants.expoConfig?.ios?.buildNumber ?? Constants.manifest?.ios?.buildNumber ?? null;
 
 // Get environment variables (these are available at runtime)
 const getEnvBuildInfo = () => ({
@@ -24,8 +21,8 @@ const getEnvBuildInfo = () => ({
     isDirty: process.env.EXPO_PUBLIC_GIT_IS_DIRTY === 'true',
     buildTime: process.env.EXPO_PUBLIC_BUILD_TIME
   },
-  version: process.env.EXPO_PUBLIC_APP_VERSION,
-  buildNumber: process.env.EXPO_PUBLIC_BUILD_NUMBER
+  version: APP_VERSION,
+  buildNumber: BUILD_NUMBER,
 });
 
 export function BuildInfo({ style }) {
@@ -40,7 +37,7 @@ export function BuildInfo({ style }) {
     return (
       <View style={[styles.container, style]}>
         <Text style={styles.fallbackText}>
-          Haps Tracker v1.0.0 • Development Mode
+          Haps Tracker v{APP_VERSION}{BUILD_NUMBER ? ` (${BUILD_NUMBER})` : ''} • Development
         </Text>
       </View>
     );

@@ -6,6 +6,7 @@ import HomeScreen from '../components/HomeScreen';
 import {
   MapViewScreen,
   TimelineListScreen,
+  TransactionsScreen,
   HeartbeatDebugScreen
 } from '../components';
 

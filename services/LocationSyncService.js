@@ -120,6 +120,12 @@ class LocationSyncService {
     console.log(`🚀 Starting sync (reason: ${reason})`);
     this.syncInProgress = true;
     this.lastSyncAttempt = Date.now();
+    // Notify AppStateContext that sync is in progress (if context is mounted)
+    const { AppStateContext } = require('../contexts/AppStateContext');
+    const notifySyncStatus = (status, err) => {
+      try { AppStateContext._updateSyncStatus?.(status, err); } catch (_) {}
+    };
+    notifySyncStatus('syncing');
 
     try {
       // Check network connectivity
@@ -150,6 +156,7 @@ class LocationSyncService {
       if (totalSynced > 0) {
         this.consecutiveFailures = 0;
         console.log(`✅ Sync completed: ${locationResult.synced} locations, ${heartbeatResult.synced} heartbeats`);
+        notifySyncStatus('success');
         
         Sentry.addBreadcrumb({
           message: `Location sync completed: ${totalSynced} items`,
@@ -172,6 +179,7 @@ class LocationSyncService {
     } catch (error) {
       this.consecutiveFailures++;
       console.error(`❌ Sync failed (attempt ${this.consecutiveFailures}):`, error);
+      notifySyncStatus('error', error);
       
       Sentry.captureException(error, {
         tags: { 

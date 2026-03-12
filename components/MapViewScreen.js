@@ -1,610 +1,339 @@
+/**
+ * MapViewScreen — server timeline map
+ *
+ * Shows visits and travel paths from the server timeline for a given day.
+ * All times are displayed in the timeline's timezone.
+ * Local visit detection is intentionally excluded (future: port to mobile).
+ */
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
+  SafeAreaView, ScrollView,
+} from 'react-native';
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { useAuth } from '../AuthContext';
 import TimelineService from '../services/TimelineService';
-import { VisitTrackingService } from '../services';
-import Button from './Button';
-import { Card, CardHeader, CardTitle, CardContent } from './Card';
-import { Badge } from './Badge';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toLocalDateString(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatTime(isoString, timezone) {
+  if (!isoString) return '';
+  try {
+    return new Date(isoString).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: timezone,
+    });
+  } catch (_) {
+    return new Date(isoString).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+const VISIT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+const visitColor = (i) => VISIT_COLORS[i % VISIT_COLORS.length];
+
+// ─── Day Selector ─────────────────────────────────────────────────────────────
+
+const DaySelector = ({ date, onPrev, onNext }) => {
+  const isToday = toLocalDateString(date) === toLocalDateString(new Date());
+  const label = isToday
+    ? 'Today'
+    : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return (
+    <View style={styles.daySelector}>
+      <TouchableOpacity onPress={onPrev} style={styles.dayArrow}>
+        <Text style={styles.dayArrowText}>&#8249;</Text>
+      </TouchableOpacity>
+      <Text style={styles.dayLabel}>{label}</Text>
+      <TouchableOpacity onPress={onNext} style={styles.dayArrow} disabled={isToday}>
+        <Text style={[styles.dayArrowText, isToday && styles.dayArrowDisabled]}>&#8250;</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// ─── Selected Item Detail Panel ───────────────────────────────────────────────
+
+const DetailPanel = ({ item, timezone, onClose }) => {
+  if (!item) return null;
+  const isVisit = item.type === 'visit';
+  return (
+    <View style={styles.detailPanel}>
+      <View style={styles.detailHeader}>
+        <Text style={styles.detailType}>{isVisit ? '📍 Visit' : '🚗 Travel'}</Text>
+        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <Text style={styles.closeBtnText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      {isVisit && item.location?.name ? (
+        <Text style={styles.detailTitle}>{item.location.name}</Text>
+      ) : null}
+      {isVisit && item.location?.address ? (
+        <Text style={styles.detailSubtitle}>{item.location.address}</Text>
+      ) : null}
+      <Text style={styles.detailTime}>
+        {formatTime(item.start_time, timezone)}
+        {item.end_time ? ` – ${formatTime(item.end_time, timezone)}` : ' – now'}
+        {item.duration ? `  (${formatDuration(item.duration)})` : ''}
+      </Text>
+      {isVisit && item.purchase_count > 0 ? (
+        <Text style={styles.detailMeta}>💳 {item.purchase_count} transaction{item.purchase_count !== 1 ? 's' : ''}</Text>
+      ) : null}
+    </View>
+  );
+};
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const MapViewScreen = () => {
   const [timeline, setTimeline] = useState(null);
-  const [localVisits, setLocalVisits] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showLocalVisits, setShowLocalVisits] = useState(true);
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 37.7749,
-    longitude: -122.4194,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
+  const [mapRegion, setMapRegion] = useState(null); // null = use device location
   const [selectedItem, setSelectedItem] = useState(null);
   const { token } = useAuth();
 
+  // Get device location once for map default
   useEffect(() => {
-    loadTimelineData();
-    loadLocalVisits();
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (!mapRegion) {
+            setMapRegion({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            });
+          }
+        }
+      } catch (_) {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    loadTimeline();
   }, [selectedDate, token]);
 
-  useEffect(() => {
-    if (showLocalVisits) {
-      loadLocalVisits();
-    }
-  }, [showLocalVisits]);
-
-  const loadTimelineData = async () => {
+  const loadTimeline = async () => {
     if (!token) return;
-
+    setLoading(true);
+    setError(null);
+    setSelectedItem(null);
     try {
-      setLoading(true);
-      const timelineData = await TimelineService.getTimelineForDate(selectedDate, token);
-      setTimeline(timelineData);
-
-      // Set map region to fit all timeline points
-      if (timelineData.visits.length > 0 || timelineData.travels.length > 0) {
-        const bounds = TimelineService.getTimelineBounds(timelineData);
-        setMapRegion(bounds);
-      }
-    } catch (error) {
-      console.error('Failed to load timeline data:', error);
-      Alert.alert('Error', 'Failed to load timeline data');
+      const data = await TimelineService.getTimelineForDate(selectedDate, token);
+      setTimeline(data);
+      // Fit map to timeline points
+      const bounds = TimelineService.getTimelineBounds(data);
+      if (bounds) setMapRegion(bounds);
+    } catch (err) {
+      setError(err && err.message ? err.message : 'Failed to load timeline');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadLocalVisits = async () => {
-    try {
-      const hoursBack = 24;
-      const visits = await VisitTrackingService.getRecentVisits(hoursBack);
-      setLocalVisits(visits);
+  const tz = timeline?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      // Adjust map region to include local visits if they exist and showLocalVisits is true
-      if (showLocalVisits && visits.length > 0) {
-        const bounds = calculateVisitsBounds(visits);
-        setMapRegion(bounds);
-      }
-    } catch (error) {
-      console.error('Failed to load local visits:', error);
-    }
+  const prevDay = () => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() - 1);
+    setSelectedDate(d);
   };
 
-  const calculateVisitsBounds = (visits) => {
-    if (visits.length === 0) return mapRegion;
-
-    const latitudes = visits.map(v => v.latitude);
-    const longitudes = visits.map(v => v.longitude);
-
-    const minLat = Math.min(...latitudes);
-    const maxLat = Math.max(...latitudes);
-    const minLng = Math.min(...longitudes);
-    const maxLng = Math.max(...longitudes);
-
-    const latDelta = Math.max((maxLat - minLat) * 1.3, 0.01);
-    const lngDelta = Math.max((maxLng - minLng) * 1.3, 0.01);
-
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLng + maxLng) / 2,
-      latitudeDelta: latDelta,
-      longitudeDelta: lngDelta,
-    };
+  const nextDay = () => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + 1);
+    if (d <= new Date()) setSelectedDate(d);
   };
 
-  const changeDate = (days) => {
-    const newDate = new Date(selectedDate);
-    newDate.setDate(newDate.getDate() + days);
-    setSelectedDate(newDate);
-  };
-
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const getVisitColor = (index) => {
-    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
-    return colors[index % colors.length];
-  };
-
-  const renderVisitMarkers = () => {
-    if (!timeline?.visits) return null;
-
-    return timeline.visits.map((visit, index) => {
-      if (!visit.center_latitude || !visit.center_longitude) return null;
-
-      return (
-        <Marker
-          key={`visit-${visit.id}`}
-          coordinate={{
-            latitude: visit.center_latitude,
-            longitude: visit.center_longitude,
-          }}
-          pinColor={getVisitColor(index)}
-          title={visit.location?.name || `Visit ${index + 1}`}
-          description={`${TimelineService.formatTime(visit.start_time)} - ${TimelineService.formatTime(visit.end_time)} (${TimelineService.formatDuration(visit.duration)})`}
-          onPress={() => setSelectedItem(visit)}
-        />
-      );
-    });
-  };
-
-  const renderLocalVisitMarkers = () => {
-    if (!showLocalVisits || !localVisits.length) return null;
-
-    return localVisits.map((visit, index) => {
-      const formatTime = (date) => {
-        if (!date) return 'Unknown';
-        return date.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: false 
-        });
-      };
-
-      const formatDuration = (seconds) => {
-        if (!seconds) return 'Unknown';
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        if (hours > 0) {
-          return `${hours}h ${minutes}m`;
-        }
-        return `${minutes}m`;
-      };
-
-      return (
-        <React.Fragment key={`local-visit-${visit.id}`}>
-          {/* Visit radius circle */}
-          <Circle
-            center={{
-              latitude: visit.latitude,
-              longitude: visit.longitude,
-            }}
-            radius={150} // Default visit radius
-            fillColor="rgba(59, 130, 246, 0.1)"
-            strokeColor="rgba(59, 130, 246, 0.3)"
-            strokeWidth={2}
-          />
-          
-          {/* Visit marker */}
-          <Marker
-            coordinate={{
-              latitude: visit.latitude,
-              longitude: visit.longitude,
-            }}
-            pinColor="#3B82F6"
-            title={`Local Visit ${index + 1}`}
-            description={`${formatTime(visit.startTime)} - ${visit.endTime ? formatTime(visit.endTime) : 'Ongoing'} (${visit.duration ? formatDuration(visit.duration) : 'In progress'})`}
-            onPress={() => setSelectedItem({
-              ...visit,
-              type: 'local_visit',
-              center_latitude: visit.latitude,
-              center_longitude: visit.longitude,
-              start_time: visit.startTime,
-              end_time: visit.endTime
-            })}
-          />
-        </React.Fragment>
-      );
-    });
-  };
-
-  const renderTravelPaths = () => {
-    if (!timeline?.visits || timeline.visits.length < 2) return null;
-
-    const paths = [];
-    for (let i = 0; i < timeline.visits.length - 1; i++) {
-      const start = timeline.visits[i];
-      const end = timeline.visits[i + 1];
-
-      if (start.center_latitude && start.center_longitude &&
-          end.center_latitude && end.center_longitude) {
-        paths.push(
-          <Polyline
-            key={`travel-${i}`}
-            coordinates={[
-              {
-                latitude: start.center_latitude,
-                longitude: start.center_longitude,
-              },
-              {
-                latitude: end.center_latitude,
-                longitude: end.center_longitude,
-              }
-            ]}
-            strokeColor="#6B7280"
-            strokeWidth={3}
-            lineDashPattern={[5, 5]}
-          />
-        );
-      }
-    }
-    return paths;
-  };
-
-  const renderSelectedItemDetails = () => {
-    if (!selectedItem) return null;
-
-    const isVisit = selectedItem.type === 'visit';
-    const isLocalVisit = selectedItem.type === 'local_visit';
-    const isTravel = selectedItem.type === 'travel';
-
-    const formatTime = (time) => {
-      if (!time) return 'Unknown';
-      if (time instanceof Date) {
-        return time.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: false 
-        });
-      }
-      return TimelineService.formatTime(time);
-    };
-
-    const formatDuration = (duration) => {
-      if (!duration) return 'Unknown';
-      if (typeof duration === 'number') {
-        const hours = Math.floor(duration / 3600);
-        const minutes = Math.floor((duration % 3600) / 60);
-        if (hours > 0) {
-          return `${hours}h ${minutes}m`;
-        }
-        return `${minutes}m`;
-      }
-      return TimelineService.formatDuration(duration);
-    };
-
-    return (
-      <Card style={styles.detailCard}>
-        <CardHeader>
-          <View style={styles.detailHeader}>
-            <CardTitle>
-              {isLocalVisit ? 'Local Visit Details' : isVisit ? 'Visit Details' : 'Travel Details'}
-            </CardTitle>
-            <Badge variant={isLocalVisit ? 'warning' : isVisit ? 'success' : 'info'}>
-              {isLocalVisit ? 'Local Visit' : isVisit ? 'Visit' : 'Travel'}
-            </Badge>
-          </View>
-        </CardHeader>
-        <CardContent>
-          {(isVisit || isLocalVisit) && selectedItem.location && (
-            <Text style={styles.locationName}>{selectedItem.location.name}</Text>
-          )}
-          {(isVisit || isLocalVisit) && selectedItem.location?.address && (
-            <Text style={styles.locationAddress}>{selectedItem.location.address}</Text>
-          )}
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Start:</Text>
-            <Text style={styles.detailValue}>{formatTime(selectedItem.start_time)}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>End:</Text>
-            <Text style={styles.detailValue}>
-              {selectedItem.end_time ? formatTime(selectedItem.end_time) : 'Ongoing'}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Duration:</Text>
-            <Text style={styles.detailValue}>{formatDuration(selectedItem.duration)}</Text>
-          </View>
-          {isLocalVisit && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Confidence:</Text>
-              <Text style={styles.detailValue}>{(selectedItem.confidence * 100).toFixed(0)}%</Text>
-            </View>
-          )}
-          {isLocalVisit && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Location Points:</Text>
-              <Text style={styles.detailValue}>{selectedItem.locationCount || 0}</Text>
-            </View>
-          )}
-          {isTravel && selectedItem.distance && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Distance:</Text>
-              <Text style={styles.detailValue}>{TimelineService.formatDistance(selectedItem.distance)}</Text>
-            </View>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={() => setSelectedItem(null)}
-            style={styles.closeButton}
-          >
-            Close
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const renderTimelineStats = () => {
-    if (showLocalVisits) {
-      return (
-        <Card style={styles.statsCard}>
-          <CardContent>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{localVisits.length}</Text>
-                <Text style={styles.statLabel}>Local Visits</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>
-                  {localVisits.filter(v => !v.endTime).length}
-                </Text>
-                <Text style={styles.statLabel}>Active</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>24h</Text>
-                <Text style={styles.statLabel}>Period</Text>
-              </View>
-            </View>
-            <Badge variant="info" style={styles.cacheBadge}>
-              Real-time Detection
-            </Badge>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    if (!timeline) return null;
-
-    const totalVisits = timeline.visits?.length || 0;
-    const totalTravels = timeline.travels?.length || 0;
-    const totalDistance = timeline.travels?.reduce((sum, travel) => sum + (travel.distance || 0), 0) || 0;
-
-    return (
-      <Card style={styles.statsCard}>
-        <CardContent>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{totalVisits}</Text>
-              <Text style={styles.statLabel}>Visits</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{totalTravels}</Text>
-              <Text style={styles.statLabel}>Travels</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{TimelineService.formatDistance(totalDistance)}</Text>
-              <Text style={styles.statLabel}>Distance</Text>
-            </View>
-          </View>
-          {timeline.fromCache && (
-            <Badge variant="warning" style={styles.cacheBadge}>
-              Offline Data
-            </Badge>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading timeline...</Text>
-      </View>
-    );
-  }
+  const visits = timeline?.visits || [];
+  const travels = timeline?.travels || [];
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Date Navigation */}
-      <Card style={styles.dateCard}>
-        <CardContent>
-          <View style={styles.dateNavigation}>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => changeDate(-1)}
-              disabled={showLocalVisits}
-            >
-              ← Previous
-            </Button>
-            <Text style={styles.dateText}>
-              {showLocalVisits ? 'Local Visits (24h)' : formatDate(selectedDate)}
-            </Text>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => changeDate(1)}
-              disabled={showLocalVisits || selectedDate.toDateString() === new Date().toDateString()}
-            >
-              Next →
-            </Button>
-          </View>
-          
-          {/* View Toggle */}
-          <View style={styles.viewToggle}>
-            <Button
-              variant={showLocalVisits ? "primary" : "outline"}
-              size="sm"
-              onPress={() => setShowLocalVisits(true)}
-            >
-              📍 Local Visits
-            </Button>
-            <Button
-              variant={!showLocalVisits ? "primary" : "outline"}
-              size="sm"
-              onPress={() => setShowLocalVisits(false)}
-            >
-              📊 Server Timeline
-            </Button>
-          </View>
-        </CardContent>
-      </Card>
+      <DaySelector date={selectedDate} onPrev={prevDay} onNext={nextDay} />
 
-      {/* Timeline Stats */}
-      {renderTimelineStats()}
-
-      {/* Map */}
       <View style={styles.mapContainer}>
         <MapView
           style={styles.map}
-          region={mapRegion}
-          onRegionChangeComplete={setMapRegion}
+          region={mapRegion || undefined}
           showsUserLocation={true}
-          showsMyLocationButton={true}
+          followsUserLocation={!mapRegion}
+          showsCompass={true}
         >
-          {showLocalVisits ? renderLocalVisitMarkers() : renderVisitMarkers()}
-          {!showLocalVisits && renderTravelPaths()}
+          {/* Visit circles + markers */}
+          {visits.map((visit, i) => {
+            if (!visit.center_latitude || !visit.center_longitude) return null;
+            const coord = { latitude: visit.center_latitude, longitude: visit.center_longitude };
+            const color = visitColor(i);
+            return (
+              <React.Fragment key={'visit-' + visit.id}>
+                <Circle
+                  center={coord}
+                  radius={visit.radius || 100}
+                  fillColor={color + '22'}
+                  strokeColor={color + '88'}
+                  strokeWidth={2}
+                />
+                <Marker
+                  coordinate={coord}
+                  pinColor={color}
+                  title={visit.location?.name || 'Visit ' + (i + 1)}
+                  description={formatTime(visit.start_time, tz) + ' – ' + (visit.end_time ? formatTime(visit.end_time, tz) : 'now')}
+                  onPress={() => setSelectedItem({ ...visit, type: 'visit' })}
+                />
+              </React.Fragment>
+            );
+          })}
+
+          {/* Travel paths using GPS track if available, else straight line */}
+          {travels.map((travel, i) => {
+            const points = travel.location_points && travel.location_points.length > 1
+              ? travel.location_points.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
+              : (() => {
+                  const startVisit = visits[i];
+                  const endVisit = visits[i + 1];
+                  if (!startVisit || !endVisit) return null;
+                  if (!startVisit.center_latitude || !endVisit.center_latitude) return null;
+                  return [
+                    { latitude: startVisit.center_latitude, longitude: startVisit.center_longitude },
+                    { latitude: endVisit.center_latitude, longitude: endVisit.center_longitude },
+                  ];
+                })();
+            if (!points) return null;
+            return (
+              <Polyline
+                key={'travel-' + (travel.id || i)}
+                coordinates={points}
+                strokeColor="#6B7280"
+                strokeWidth={3}
+                lineDashPattern={[5, 5]}
+                tappable={true}
+                onPress={() => setSelectedItem({ ...travel, type: 'travel' })}
+              />
+            );
+          })}
         </MapView>
+
+        {/* Loading overlay */}
+        {loading ? (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+          </View>
+        ) : null}
+
+        {/* Error banner */}
+        {error && !loading ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={loadTimeline} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Empty state */}
+        {!loading && !error && visits.length === 0 && travels.length === 0 ? (
+          <View style={styles.emptyOverlay}>
+            <Text style={styles.emptyText}>No timeline data for this day</Text>
+          </View>
+        ) : null}
       </View>
 
-      {/* Selected Item Details */}
-      {renderSelectedItemDetails()}
+      {/* Selected item detail */}
+      <DetailPanel item={selectedItem} timezone={tz} onClose={() => setSelectedItem(null)} />
 
-      {/* Refresh Button */}
-      <Button
-        variant="primary"
-        onPress={loadTimelineData}
-        style={styles.refreshButton}
-      >
-      🔄 Refresh Data
-      </Button>
+      {/* Visit list at bottom */}
+      {visits.length > 0 && !selectedItem ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.visitStrip}
+          contentContainerStyle={styles.visitStripContent}>
+          {visits.map((visit, i) => (
+            <TouchableOpacity
+              key={'chip-' + visit.id}
+              style={[styles.visitChip, { borderColor: visitColor(i) }]}
+              onPress={() => setSelectedItem({ ...visit, type: 'visit' })}
+            >
+              <Text style={[styles.visitChipTime, { color: visitColor(i) }]}>
+                {formatTime(visit.start_time, tz)}
+              </Text>
+              <Text style={styles.visitChipName} numberOfLines={1}>
+                {visit.location?.name || 'Visit ' + (i + 1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
     </SafeAreaView>
   );
 };
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  daySelector: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 12,
+    backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
+  dayArrow: { paddingHorizontal: 12, paddingVertical: 4 },
+  dayArrowText: { fontSize: 28, color: '#3b82f6', lineHeight: 34 },
+  dayArrowDisabled: { color: '#d1d5db' },
+  dayLabel: { fontSize: 17, fontWeight: '600', color: '#111827' },
+  mapContainer: { flex: 1, position: 'relative' },
+  map: { flex: 1 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#6b7280',
+  errorBanner: {
+    position: 'absolute', bottom: 16, left: 16, right: 16,
+    backgroundColor: '#fef2f2', borderRadius: 10, padding: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: '#fca5a5',
   },
-  dateCard: {
-    margin: 16,
-    marginBottom: 8,
+  errorText: { flex: 1, color: '#dc2626', fontSize: 13 },
+  retryBtn: { marginLeft: 8, backgroundColor: '#dc2626', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 },
+  retryText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  emptyOverlay: {
+    position: 'absolute', bottom: 20, left: 20, right: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, padding: 12, alignItems: 'center',
   },
-  dateNavigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  emptyText: { color: '#fff', fontSize: 14 },
+  detailPanel: {
+    backgroundColor: '#ffffff', paddingHorizontal: 16, paddingVertical: 14,
+    borderTopWidth: 1, borderTopColor: '#e5e7eb',
   },
-  dateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    textAlign: 'center',
-    flex: 1,
-    marginHorizontal: 16,
+  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  detailType: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
+  closeBtn: { padding: 4 },
+  closeBtnText: { fontSize: 16, color: '#9ca3af' },
+  detailTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 2 },
+  detailSubtitle: { fontSize: 13, color: '#6b7280', marginBottom: 6 },
+  detailTime: { fontSize: 14, color: '#374151' },
+  detailMeta: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  visitStrip: { maxHeight: 72, backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  visitStripContent: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  visitChip: {
+    borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+    backgroundColor: '#ffffff', minWidth: 100,
   },
-  viewToggle: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 12,
-    gap: 8,
-  },
-  statsCard: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  cacheBadge: {
-    alignSelf: 'center',
-    marginTop: 8,
-  },
-  mapContainer: {
-    flex: 1,
-    margin: 16,
-    marginTop: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  map: {
-    flex: 1,
-  },
-  detailCard: {
-    position: 'absolute',
-    bottom: 80,
-    left: 16,
-    right: 16,
-    backgroundColor: 'white',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  locationName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  locationAddress: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
-  },
-  closeButton: {
-    marginTop: 12,
-  },
-  refreshButton: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-  },
+  visitChipTime: { fontSize: 11, fontWeight: '700' },
+  visitChipName: { fontSize: 12, color: '#374151', marginTop: 1 },
 });
 
 export default MapViewScreen;
