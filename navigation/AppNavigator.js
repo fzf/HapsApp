@@ -4,8 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import TabBarIcon from './TabBarIcon';
 import HomeScreen from '../components/HomeScreen';
 import {
-  MapViewScreen,
-  TimelineListScreen,
+  MapTimelineScreen,
   TransactionsScreen,
   HeartbeatDebugScreen
 } from '../components';
@@ -41,17 +40,8 @@ const AppNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Map"
-        component={MapViewScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <TabBarIcon name="map" color={color} size={size} focused={focused} />
-          ),
-        }}
-      />
-      <Tab.Screen
         name="Timeline"
-        component={TimelineListScreen}
+        component={MapTimelineScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <TabBarIcon name="timeline" color={color} size={size} focused={focused} />
