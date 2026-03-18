@@ -2,7 +2,7 @@
   "expo": {
     "name": "HapsApp",
     "slug": "HapsApp",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -33,7 +33,7 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.fzf.HapsApp",
-      "buildNumber": "80"
+      "buildNumber": "81"
     },
     "android": {
       "adaptiveIcon": {
