@@ -16,3 +16,4 @@ export { default as HeartbeatDebugScreen } from './HeartbeatDebugScreen';
 export { default as MapViewScreen } from './MapViewScreen';
 export { default as TimelineListScreen } from './TimelineListScreen';
 export { default as TransactionsScreen } from './TransactionsScreen';
+export { default as MapTimelineScreen } from './MapTimelineScreen';
