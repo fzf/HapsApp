@@ -1,3 +1,4 @@
+import { isAdminUser } from '../utils/adminUtils';
 import React, { useState, useEffect, useRef } from 'react';
 import { Text, View, Platform, StyleSheet, ScrollView } from 'react-native';
 import * as Device from 'expo-device';
@@ -283,6 +284,7 @@ const HomeScreen = () => {
   
   // Use new hooks and contexts
   const { user, logout } = useAuth();
+  const showDebug = isAdminUser(user);
   const { isOnline, canSync, syncStatus, lastSyncTime, locationPermission, isTrackingLocation } = useAppState();
   const {
     startTracking,
@@ -482,7 +484,7 @@ const HomeScreen = () => {
                   {process.env.EXPO_PUBLIC_API_URL || 'Not configured'}
                 </Text>
               </View>
-              {DEBUG_NOTIFICATIONS && (
+              {showDebug && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Debug Notifications</Text>
                   <Text style={styles.infoValue}>
@@ -565,7 +567,7 @@ const HomeScreen = () => {
             🔄 Restart Location Tracking
           </Button>
 
-          {DEBUG_NOTIFICATIONS && (
+          {showDebug && (
             <Button
               variant={debugNotificationsEnabled ? "secondary" : "outline"}
               style={styles.actionButton}

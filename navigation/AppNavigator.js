@@ -1,4 +1,6 @@
 import React from 'react';
+import { useAuth } from '../AuthContext';
+import { isAdminUser } from '../utils/adminUtils';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import TabBarIcon from './TabBarIcon';
@@ -15,6 +17,9 @@ const Tab = createBottomTabNavigator();
  * Main app navigator with bottom tab navigation
  */
 const AppNavigator = () => {
+  const { user } = useAuth();
+  const showDebug = isAdminUser(user);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -48,7 +53,7 @@ const AppNavigator = () => {
           ),
         }}
       />
-      {__DEV__ && (
+      {showDebug && (
         <Tab.Screen
           name="Debug"
           component={HeartbeatDebugScreen}
