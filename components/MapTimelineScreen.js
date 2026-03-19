@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  SafeAreaView, ScrollView, FlatList, Animated, PanResponder,
+  SafeAreaView, ScrollView, FlatList, Animated, PanResponder, AppState,
 } from 'react-native';
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -216,6 +216,27 @@ export default function MapTimelineScreen() {
       } catch (_) {}
     })();
   }, []);
+
+  // Track what date was "today" when the screen last loaded
+  const lastLoadedDate = useRef(toLocalDateString(new Date()));
+
+  // Refresh when app comes back to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        const todayStr = toLocalDateString(new Date());
+        // If the user was viewing today and the date has rolled over midnight, snap to new today
+        if (lastLoadedDate.current !== todayStr) {
+          setSelectedDate(new Date()); // triggers the load useEffect below
+        } else {
+          // Same day — just reload to pick up new timeline data
+          load(selectedDate);
+        }
+        lastLoadedDate.current = todayStr;
+      }
+    });
+    return () => sub.remove();
+  }, [load, selectedDate]);
 
   const load = useCallback(async (date) => {
     if (!token) return;
