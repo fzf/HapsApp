@@ -121,9 +121,9 @@ class LocationSyncService {
     this.syncInProgress = true;
     this.lastSyncAttempt = Date.now();
     // Notify AppStateContext that sync is in progress (if context is mounted)
-    const { AppStateContext } = require('../contexts/AppStateContext');
+    const { SyncStatusRegistry } = require('../contexts/AppStateContext');
     const notifySyncStatus = (status, err) => {
-      try { AppStateContext._updateSyncStatus?.(status, err); } catch (_) {}
+      try { SyncStatusRegistry.notify?.(status, err); } catch (_) {}
     };
     notifySyncStatus('syncing');
 

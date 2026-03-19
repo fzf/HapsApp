@@ -158,7 +158,7 @@ export function BuildInfoFooter({ style }) {
   if (!info || !info.git.ref || info.git.ref === 'unknown') {
     return (
       <Text style={[styles.footerText, style]}>
-        Haps Location Tracker v1.0.0
+        Haps Tracker v{APP_VERSION}{BUILD_NUMBER ? ` (${BUILD_NUMBER})` : ''}
       </Text>
     );
   }

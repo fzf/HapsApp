@@ -6,6 +6,10 @@ import LoggingService from '../services/LoggingService';
 
 const AppStateContext = createContext();
 
+// Module-level registry so services can notify without importing React context
+// (avoids circular import issues; LocationSyncService uses this)
+export const SyncStatusRegistry = { notify: null };
+
 // App state reducer
 const appStateReducer = (state, action) => {
   switch (action.type) {
@@ -206,9 +210,14 @@ export const AppStateProvider = ({ children }) => {
   // Register a global callback so LocationSyncService can update sync status
   // without importing the context (avoids circular deps)
   React.useEffect(() => {
+    SyncStatusRegistry.notify = updateSyncStatus;
+    // Also keep legacy path for any code still using this
     AppStateContext._updateSyncStatus = updateSyncStatus;
-    return () => { AppStateContext._updateSyncStatus = null; };
-  }, []);
+    return () => {
+      SyncStatusRegistry.notify = null;
+      AppStateContext._updateSyncStatus = null;
+    };
+  }, [updateSyncStatus]);
 
   const value = {
     ...state,
