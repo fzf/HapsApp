@@ -1,6 +1,14 @@
 import TimelineDatabase from './TimelineDatabase';
 import APIService from './APIService';
 
+// Build YYYY-MM-DD in local time (toISOString() is UTC and can give wrong date)
+function toLocalDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 class TimelineService {
   constructor() {
     // No longer need to store API_URL since we use APIService
@@ -8,7 +16,7 @@ class TimelineService {
 
   async fetchTimelineForDate(date, authToken) {
     try {
-      const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const dateString = toLocalDateString(date); // local date, not UTC
       
       // Ensure API service has the auth token
       APIService.setCachedAuthToken(authToken);
@@ -41,7 +49,7 @@ class TimelineService {
       console.error('Failed to fetch timeline from API:', error);
 
       // Fallback to local data if API fails
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = toLocalDateString(date);
       const localData = await TimelineDatabase.getTimelineForDate(dateString);
       if (localData.visits.length > 0 || localData.travels.length > 0) {
         console.log('Using cached timeline data');
@@ -59,8 +67,8 @@ class TimelineService {
 
   async fetchTimelineForDateRange(startDate, endDate, authToken) {
     try {
-      const startDateString = startDate.toISOString().split('T')[0];
-      const endDateString = endDate.toISOString().split('T')[0];
+      const startDateString = toLocalDateString(startDate);
+      const endDateString = toLocalDateString(endDate);
       
       // Ensure API service has the auth token
       APIService.setCachedAuthToken(authToken);
@@ -88,7 +96,7 @@ class TimelineService {
   }
 
   async getTimelineForDate(date, authToken) {
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = toLocalDateString(date);
 
     try {
       // Try to get fresh data from API
@@ -128,7 +136,7 @@ class TimelineService {
 
       promises.push(
         this.fetchTimelineForDate(date, authToken).catch(error => {
-          console.warn(`Failed to sync timeline for ${date.toISOString().split('T')[0]}:`, error);
+          console.warn(`Failed to sync timeline for ${toLocalDateString(date)}:`, error);
         })
       );
     }
