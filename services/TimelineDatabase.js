@@ -128,9 +128,16 @@ class TimelineDatabase {
       SELECT * FROM travels WHERE date = ? ORDER BY start_time
     `, [date]);
 
-    // Parse suggested_locations JSON
+    // Parse suggested_locations JSON and reconstruct nested location object
     const parsedVisits = visits.map(visit => ({
       ...visit,
+      location: visit.location_name ? {
+        id: null,
+        name: visit.location_name,
+        address: visit.location_address,
+        latitude: visit.location_latitude,
+        longitude: visit.location_longitude,
+      } : null,
       suggested_locations: visit.suggested_locations ? JSON.parse(visit.suggested_locations) : []
     }));
 
