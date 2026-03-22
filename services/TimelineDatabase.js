@@ -73,7 +73,7 @@ class TimelineDatabase {
     // Insert visits
     for (const visit of timelineData.visits) {
       await this.db.runAsync(`
-        INSERT INTO visits (
+        INSERT OR REPLACE INTO visits (
           backend_id, date, start_time, end_time, duration,
           center_latitude, center_longitude,
           location_name, location_address, location_latitude, location_longitude,
@@ -99,7 +99,7 @@ class TimelineDatabase {
     // Insert travels
     for (const travel of timelineData.travels) {
       await this.db.runAsync(`
-        INSERT INTO travels (
+        INSERT OR REPLACE INTO travels (
           backend_id, date, start_time, end_time, duration, distance,
           center_latitude, center_longitude, synced_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
