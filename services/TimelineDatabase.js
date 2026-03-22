@@ -14,11 +14,21 @@ class TimelineDatabase {
   }
 
   async createTables() {
-    // Visits table
+    // Migrate: drop old tables if they used backend_id UNIQUE (single column),
+    // which broke items that appear in multiple days' API responses.
+    // We now use UNIQUE(backend_id, date) so the same item can be cached
+    // under each day it appears in without overwriting each other.
+    await this.db.execAsync(`
+      DROP TABLE IF EXISTS visits;
+      DROP TABLE IF EXISTS travels;
+      DROP TABLE IF EXISTS schema_version;
+    `);
+
+    // Visits table — unique per (backend_id, date) pair
     await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS visits (
         id INTEGER PRIMARY KEY,
-        backend_id INTEGER UNIQUE,
+        backend_id INTEGER NOT NULL,
         date TEXT NOT NULL,
         start_time TEXT NOT NULL,
         end_time TEXT NOT NULL,
@@ -29,17 +39,18 @@ class TimelineDatabase {
         location_address TEXT,
         location_latitude REAL,
         location_longitude REAL,
-        suggested_locations TEXT, -- JSON string
+        suggested_locations TEXT,
         synced_at TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(backend_id, date)
       );
     `);
 
-    // Travels table
+    // Travels table — unique per (backend_id, date) pair
     await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS travels (
         id INTEGER PRIMARY KEY,
-        backend_id INTEGER UNIQUE,
+        backend_id INTEGER NOT NULL,
         date TEXT NOT NULL,
         start_time TEXT NOT NULL,
         end_time TEXT NOT NULL,
@@ -48,16 +59,14 @@ class TimelineDatabase {
         center_latitude REAL,
         center_longitude REAL,
         synced_at TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(backend_id, date)
       );
     `);
 
-    // Create indexes for better query performance
     await this.db.execAsync(`
       CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(date);
       CREATE INDEX IF NOT EXISTS idx_travels_date ON travels(date);
-      CREATE INDEX IF NOT EXISTS idx_visits_backend_id ON visits(backend_id);
-      CREATE INDEX IF NOT EXISTS idx_travels_backend_id ON travels(backend_id);
     `);
   }
 
