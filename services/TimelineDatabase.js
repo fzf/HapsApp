@@ -18,11 +18,10 @@ class TimelineDatabase {
     // which broke items that appear in multiple days' API responses.
     // We now use UNIQUE(backend_id, date) so the same item can be cached
     // under each day it appears in without overwriting each other.
-    await this.db.execAsync(`
-      DROP TABLE IF EXISTS visits;
-      DROP TABLE IF EXISTS travels;
-      DROP TABLE IF EXISTS schema_version;
-    `);
+    // Note: execAsync doesn't reliably support multiple statements — run separately.
+    await this.db.execAsync('DROP TABLE IF EXISTS visits');
+    await this.db.execAsync('DROP TABLE IF EXISTS travels');
+    await this.db.execAsync('DROP TABLE IF EXISTS schema_version');
 
     // Visits table — unique per (backend_id, date) pair
     await this.db.execAsync(`
