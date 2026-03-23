@@ -23,6 +23,17 @@
         "simulator": false
       }
     },
+    "debug": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_BUILD_TYPE": "debug",
+        "EXPO_PUBLIC_DEBUG_MODE": "true"
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "env": {

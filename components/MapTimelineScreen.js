@@ -15,6 +15,7 @@ import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useAuth } from '../AuthContext';
 import TimelineService from '../services/TimelineService';
+import LoggingService from '../services/LoggingService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -246,10 +247,22 @@ export default function MapTimelineScreen() {
     try {
       const data = await TimelineService.getTimelineForDate(date, token);
       setTimeline(data);
-      const anyTrack = (data.travels || []).some(
+      const travels = data.travels || [];
+      const anyTrack = travels.some(
         (t) => t.track_points && t.track_points.length > 1
       );
       setHasTrackData(anyTrack);
+      LoggingService.info('map.load.result', {
+        date: toLocalDateString(date),
+        visits: (data.visits || []).length,
+        travels: travels.length,
+        from_cache: data.fromCache ?? false,
+        travel_ids: travels.map(t => t.id),
+        travel_types: travels.map(t => t.type),
+        travel_has_track: travels.map(t => !!(t.track_points && t.track_points.length > 1)),
+        travel_durations: travels.map(t => t.duration),
+        has_timeline_key: !!data.timeline,
+      });
       // Fit map
       const bounds = TimelineService.getTimelineBounds(data);
       if (bounds && mapReady) {
