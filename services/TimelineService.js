@@ -1,5 +1,6 @@
 import TimelineDatabase from './TimelineDatabase';
 import APIService from './APIService';
+import LoggingService from './LoggingService';
 
 // Build YYYY-MM-DD in local time (toISOString() is UTC and can give wrong date)
 function toLocalDateString(date) {
@@ -15,50 +16,67 @@ class TimelineService {
   }
 
   async fetchTimelineForDate(date, authToken) {
+    const dateString = toLocalDateString(date);
+    LoggingService.info('timeline.fetch.start', { date: dateString });
+
     try {
-      const dateString = toLocalDateString(date); // local date, not UTC
-      
-      // Ensure API service has the auth token
       APIService.setCachedAuthToken(authToken);
-      
+
       const data = await APIService.getTimelineForDate(dateString);
 
-      // Handle new API format with combined timeline
-      if (data.timeline) {
-        // Convert combined timeline to separate visits and travels for backward compatibility
-        const visits = data.timeline.filter(item => item.type === 'visit');
-        const travels = data.timeline.filter(item => item.type === 'travel');
+      const totalItems = data.timeline?.length ?? 0;
+      const visits = data.timeline ? data.timeline.filter(item => item.type === 'visit') : (data.visits || []);
+      const travels = data.timeline ? data.timeline.filter(item => item.type === 'travel') : (data.travels || []);
 
-        const convertedData = {
-          ...data,
-          visits: visits,
-          travels: travels
-        };
+      LoggingService.info('timeline.fetch.api_success', {
+        date: dateString,
+        total_items: totalItems,
+        visits: visits.length,
+        travels: travels.length,
+        has_timeline_key: !!data.timeline,
+        visit_ids: visits.map(v => v.id),
+        travel_ids: travels.map(t => t.id),
+      });
 
-        // Save to local database
+      const convertedData = { ...data, visits, travels };
+
+      // Save to local database
+      try {
         await TimelineDatabase.saveTimelineData(dateString, convertedData);
-
-        return convertedData;
-      } else {
-        // Save to local database (old format)
-        await TimelineDatabase.saveTimelineData(dateString, data);
-
-        return data;
-      }
-    } catch (error) {
-      console.error('Failed to fetch timeline from API:', error);
-
-      // Fallback to local data if API fails
-      const dateString = toLocalDateString(date);
-      const localData = await TimelineDatabase.getTimelineForDate(dateString);
-      if (localData.visits.length > 0 || localData.travels.length > 0) {
-        console.log('Using cached timeline data');
-        return {
+        LoggingService.info('timeline.cache.save_success', { date: dateString, visits: visits.length, travels: travels.length });
+      } catch (saveError) {
+        LoggingService.error('timeline.cache.save_failed', saveError, {
           date: dateString,
-          timezone: 'UTC', // Default since we don't have this info locally
-          ...localData,
-          fromCache: true
-        };
+          visits: visits.length,
+          travels: travels.length,
+          error: saveError?.message,
+        });
+        // Don't throw — save failure shouldn't block returning good data
+      }
+
+      return convertedData;
+    } catch (error) {
+      LoggingService.error('timeline.fetch.api_failed', error, {
+        date: dateString,
+        error: error?.message,
+        status: error?.status,
+      });
+
+      // Fallback to local cache
+      try {
+        const localData = await TimelineDatabase.getTimelineForDate(dateString);
+        LoggingService.info('timeline.cache.read', {
+          date: dateString,
+          visits: localData.visits?.length ?? 0,
+          travels: localData.travels?.length ?? 0,
+          has_data: (localData.visits?.length > 0 || localData.travels?.length > 0),
+        });
+
+        if (localData.visits.length > 0 || localData.travels.length > 0) {
+          return { date: dateString, timezone: 'UTC', ...localData, fromCache: true };
+        }
+      } catch (cacheError) {
+        LoggingService.error('timeline.cache.read_failed', cacheError, { date: dateString, error: cacheError?.message });
       }
 
       throw error;
@@ -97,32 +115,46 @@ class TimelineService {
 
   async getTimelineForDate(date, authToken) {
     const dateString = toLocalDateString(date);
+    LoggingService.info('timeline.get.start', { date: dateString });
 
     try {
-      // Try to get fresh data from API
-      return await this.fetchTimelineForDate(date, authToken);
+      const result = await this.fetchTimelineForDate(date, authToken);
+      LoggingService.info('timeline.get.success', {
+        date: dateString,
+        visits: result.visits?.length ?? 0,
+        travels: result.travels?.length ?? 0,
+        from_cache: result.fromCache ?? false,
+      });
+      return result;
     } catch (error) {
-      // If API fails, try local cache
-      console.log('API failed, checking local cache...');
-      const localData = await TimelineDatabase.getTimelineForDate(dateString);
+      LoggingService.warn('timeline.get.fallback_to_cache', {
+        date: dateString,
+        error: error?.message,
+      });
 
-      if (localData.visits.length > 0 || localData.travels.length > 0) {
-        return {
+      try {
+        const localData = await TimelineDatabase.getTimelineForDate(dateString);
+        LoggingService.info('timeline.get.cache_result', {
           date: dateString,
-          timezone: 'UTC',
-          ...localData,
-          fromCache: true
-        };
+          visits: localData.visits?.length ?? 0,
+          travels: localData.travels?.length ?? 0,
+        });
+
+        if (localData.visits.length > 0 || localData.travels.length > 0) {
+          return { date: dateString, timezone: 'UTC', ...localData, fromCache: true };
+        }
+      } catch (cacheError) {
+        LoggingService.error('timeline.get.cache_error', cacheError, { date: dateString });
       }
 
-      // No data available
+      LoggingService.warn('timeline.get.empty_result', { date: dateString, error: error?.message });
       return {
         date: dateString,
         timezone: 'UTC',
         visits: [],
         travels: [],
         fromCache: false,
-        error: error.message
+        error: error.message,
       };
     }
   }

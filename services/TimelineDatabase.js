@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import LoggingService from './LoggingService';
 
 class TimelineDatabase {
   constructor() {
@@ -73,56 +74,68 @@ class TimelineDatabase {
     await this.init();
 
     const syncedAt = new Date().toISOString();
+    const visits = timelineData.visits || [];
+    const travels = timelineData.travels || [];
+
+    LoggingService.info('timeline.db.save_start', {
+      date,
+      visits: visits.length,
+      travels: travels.length,
+      visit_ids: visits.map(v => v.id),
+      travel_ids: travels.map(t => t.id),
+    });
 
     // Clear existing data for this date
     await this.db.runAsync('DELETE FROM visits WHERE date = ?', [date]);
     await this.db.runAsync('DELETE FROM travels WHERE date = ?', [date]);
 
     // Insert visits
-    for (const visit of timelineData.visits) {
-      await this.db.runAsync(`
-        INSERT OR REPLACE INTO visits (
-          backend_id, date, start_time, end_time, duration,
-          center_latitude, center_longitude,
-          location_name, location_address, location_latitude, location_longitude,
-          suggested_locations, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        visit.id,
-        date,
-        visit.start_time,
-        visit.end_time,
-        visit.duration,
-        visit.center_latitude,
-        visit.center_longitude,
-        visit.location?.name,
-        visit.location?.address,
-        visit.location?.latitude,
-        visit.location?.longitude,
-        JSON.stringify(visit.suggested_locations || []),
-        syncedAt
-      ]);
+    for (const visit of visits) {
+      try {
+        await this.db.runAsync(`
+          INSERT OR REPLACE INTO visits (
+            backend_id, date, start_time, end_time, duration,
+            center_latitude, center_longitude,
+            location_name, location_address, location_latitude, location_longitude,
+            suggested_locations, synced_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          visit.id, date, visit.start_time, visit.end_time, visit.duration,
+          visit.center_latitude, visit.center_longitude,
+          visit.location?.name, visit.location?.address,
+          visit.location?.latitude, visit.location?.longitude,
+          JSON.stringify(visit.suggested_locations || []), syncedAt,
+        ]);
+      } catch (err) {
+        LoggingService.error('timeline.db.visit_insert_failed', err, {
+          date, visit_id: visit.id, error: err?.message,
+        });
+        throw err;
+      }
     }
 
     // Insert travels
-    for (const travel of timelineData.travels) {
-      await this.db.runAsync(`
-        INSERT OR REPLACE INTO travels (
-          backend_id, date, start_time, end_time, duration, distance,
-          center_latitude, center_longitude, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        travel.id,
-        date,
-        travel.start_time,
-        travel.end_time,
-        travel.duration,
-        travel.distance,
-        travel.center_latitude,
-        travel.center_longitude,
-        syncedAt
-      ]);
+    for (const travel of travels) {
+      try {
+        await this.db.runAsync(`
+          INSERT OR REPLACE INTO travels (
+            backend_id, date, start_time, end_time, duration, distance,
+            center_latitude, center_longitude, synced_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          travel.id, date, travel.start_time, travel.end_time,
+          travel.duration, travel.distance,
+          travel.center_latitude, travel.center_longitude, syncedAt,
+        ]);
+      } catch (err) {
+        LoggingService.error('timeline.db.travel_insert_failed', err, {
+          date, travel_id: travel.id, error: err?.message,
+        });
+        throw err;
+      }
     }
+
+    LoggingService.info('timeline.db.save_complete', { date, visits: visits.length, travels: travels.length });
   }
 
   async getTimelineForDate(date) {
