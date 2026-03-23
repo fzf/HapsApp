@@ -5,10 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl
+  RefreshControl,
+  Alert
 } from 'react-native';
 import HeartbeatService from '../services/HeartbeatService';
 import LocationService from '../services/LocationService';
+import TimelineDatabase from '../services/TimelineDatabase';
 import { Card } from './Card';
 import Button from './Button';
 
@@ -17,6 +19,16 @@ const HeartbeatDebugScreen = () => {
   const [locationStatus, setLocationStatus] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastHeartbeatResult, setLastHeartbeatResult] = useState(null);
+  const [dbStats, setDbStats] = useState(null);
+
+  const loadDbStats = async () => {
+    try {
+      const stats = await TimelineDatabase.getStats();
+      setDbStats(stats);
+    } catch (error) {
+      console.error('Failed to load db stats:', error);
+    }
+  };
 
   const loadStatus = async () => {
     try {
@@ -26,6 +38,7 @@ const HeartbeatDebugScreen = () => {
       ]);
       setHeartbeatStatus(hbStatus);
       setLocationStatus(locStatus);
+      await loadDbStats();
     } catch (error) {
       console.error('Failed to load status:', error);
     }
@@ -41,6 +54,29 @@ const HeartbeatDebugScreen = () => {
     setRefreshing(true);
     await loadStatus();
     setRefreshing(false);
+  };
+
+  const clearDatabase = () => {
+    Alert.alert(
+      'Clear Database',
+      'This will delete all cached timeline data (visits & travels). The app will re-fetch from the server on next load. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await TimelineDatabase.clearAllData();
+              await loadDbStats();
+              Alert.alert('Done', 'Database cleared successfully.');
+            } catch (error) {
+              Alert.alert('Error', `Failed to clear database: ${error.message}`);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const forceHeartbeat = async () => {
@@ -201,6 +237,33 @@ const HeartbeatDebugScreen = () => {
         </Card>
       )}
 
+      {/* Database Stats */}
+      <Card style={styles.card}>
+        <Text style={styles.cardTitle}>Database</Text>
+        {dbStats ? (
+          <>
+            <View style={styles.statusRow}>
+              <Text style={styles.label}>Visits:</Text>
+              <Text style={styles.value}>{dbStats.visitCount} rows</Text>
+            </View>
+            <View style={styles.statusRow}>
+              <Text style={styles.label}>Travels:</Text>
+              <Text style={styles.value}>{dbStats.travelCount} rows</Text>
+            </View>
+            <View style={styles.statusRow}>
+              <Text style={styles.label}>Oldest entry:</Text>
+              <Text style={styles.value}>{dbStats.oldestDate ?? 'N/A'}</Text>
+            </View>
+            <View style={styles.statusRow}>
+              <Text style={styles.label}>Newest entry:</Text>
+              <Text style={styles.value}>{dbStats.newestDate ?? 'N/A'}</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.loading}>Loading...</Text>
+        )}
+      </Card>
+
       {/* Actions */}
       <Card style={styles.card}>
         <Text style={styles.cardTitle}>Test Actions</Text>
@@ -216,6 +279,13 @@ const HeartbeatDebugScreen = () => {
           style={styles.button}
         >
           Refresh Status
+        </Button>
+        <Button
+          onPress={clearDatabase}
+          variant="danger"
+          style={styles.button}
+        >
+          Clear Database
         </Button>
       </Card>
 

@@ -174,6 +174,30 @@ class TimelineDatabase {
     await this.db.runAsync('DELETE FROM visits');
     await this.db.runAsync('DELETE FROM travels');
   }
+
+  async getStats() {
+    await this.init();
+    const [visitRow, travelRow, dateRow] = await Promise.all([
+      this.db.getFirstAsync('SELECT COUNT(*) as count FROM visits'),
+      this.db.getFirstAsync('SELECT COUNT(*) as count FROM travels'),
+      this.db.getFirstAsync(`
+        SELECT
+          MIN(date) as oldest,
+          MAX(date) as newest
+        FROM (
+          SELECT date FROM visits
+          UNION ALL
+          SELECT date FROM travels
+        )
+      `),
+    ]);
+    return {
+      visitCount: visitRow?.count ?? 0,
+      travelCount: travelRow?.count ?? 0,
+      oldestDate: dateRow?.oldest ?? null,
+      newestDate: dateRow?.newest ?? null,
+    };
+  }
 }
 
 export default new TimelineDatabase();
