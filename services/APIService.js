@@ -314,6 +314,10 @@ class APIService {
   async getTimelineForDateRange(startDate, endDate) {
     return this.get(`/api/timeline?start_date=${startDate}&end_date=${endDate}`);
   }
+
+  async getLocationPointsForDate(dateString) {
+    return this.get(`/api/timeline/location_points?date=${dateString}`);
+  }
 }
 
 /**

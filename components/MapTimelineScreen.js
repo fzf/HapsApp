@@ -104,10 +104,13 @@ const DaySelector = ({ date, onPrev, onNext }) => {
 
 // ─── Timeline Item ────────────────────────────────────────────────────────────
 
-const TimelineItem = ({ item, index, timezone, isSelected, onPress, visitIndex }) => {
+const TimelineItem = ({ item, index, timezone, isSelected, onPress, visitIndex, locationPoints }) => {
   const isVisit = item.type === 'visit';
   const color = isVisit ? visitColor(visitIndex ?? 0) : '#6B7280';
   const hasTrack = !isVisit && item.track_points && item.track_points.length > 1;
+  const visitGpsCount = isVisit && isSelected && locationPoints
+    ? locationPoints.filter(p => p.timeline_id === item.id).length
+    : 0;
 
   return (
     <TouchableOpacity
@@ -137,6 +140,9 @@ const TimelineItem = ({ item, index, timezone, isSelected, onPress, visitIndex }
             </Text>
             {item.purchase_count > 0 ? (
               <Text style={styles.itemBadge}>💳 {item.purchase_count} purchase{item.purchase_count !== 1 ? 's' : ''}</Text>
+            ) : null}
+            {visitGpsCount > 0 ? (
+              <Text style={styles.itemBadge}>📍 {visitGpsCount} GPS point{visitGpsCount !== 1 ? 's' : ''}</Text>
             ) : null}
           </>
         ) : (
@@ -192,6 +198,7 @@ export default function MapTimelineScreen() {
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [timeline, setTimeline] = useState(null);
+  const [locationPoints, setLocationPoints] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null); // "visit-123" or "travel-456"
@@ -244,8 +251,14 @@ export default function MapTimelineScreen() {
     setLoading(true);
     setError(null);
     setSelectedId(null);
+    setLocationPoints([]);
     try {
-      const data = await TimelineService.getTimelineForDate(date, token);
+      const dateString = toLocalDateString(date);
+      const [data, pointsData] = await Promise.all([
+        TimelineService.getTimelineForDate(date, token),
+        APIService.getLocationPointsForDate(dateString).catch(() => null),
+      ]);
+      setLocationPoints(pointsData?.location_points || []);
       setTimeline(data);
       const travels = data.travels || [];
       const anyTrack = travels.some(
@@ -371,6 +384,20 @@ export default function MapTimelineScreen() {
                 description={fmt(visit.start_time, tz) + (visit.end_time ? ` – ${fmt(visit.end_time, tz)}` : '')}
                 onPress={() => selectItem({ ...visit, type: 'visit' })}
               />
+              {/* GPS points for this visit when selected */}
+              {isSelected && locationPoints
+                .filter(p => p.timeline_id === visit.id && p.latitude && p.longitude)
+                .map(p => (
+                  <Circle
+                    key={`gps-${p.id}`}
+                    center={{ latitude: p.latitude, longitude: p.longitude }}
+                    radius={4}
+                    fillColor={color + 'CC'}
+                    strokeColor={color}
+                    strokeWidth={1}
+                  />
+                ))
+              }
             </React.Fragment>
           );
         })}
@@ -513,6 +540,7 @@ export default function MapTimelineScreen() {
                 isSelected={selectedId === `${item.type}-${item.id}`}
                 onPress={selectItem}
                 visitIndex={item.type === 'visit' ? visitIndexMap[item.id] : null}
+                locationPoints={locationPoints}
               />
             )}
             contentContainerStyle={styles.listContent}
