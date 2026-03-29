@@ -318,6 +318,10 @@ class APIService {
   async getLocationPointsForDate(dateString) {
     return this.get(`/api/timeline/location_points?date=${dateString}`);
   }
+
+  async getTransactionsForDate(dateString) {
+    return this.get(`/api/transactions?date=${dateString}`);
+  }
 }
 
 /**

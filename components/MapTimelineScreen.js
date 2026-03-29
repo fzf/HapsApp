@@ -16,6 +16,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../AuthContext';
 import TimelineService from '../services/TimelineService';
 import LoggingService from '../services/LoggingService';
+import APIService from '../services/APIService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,13 @@ function fmtDistance(meters) {
   if (!meters) return '';
   if (meters < 1000) return `${Math.round(meters)}m`;
   return `${(meters / 1609.34).toFixed(1)}mi`;
+}
+
+function fmtAmount(amount) {
+  if (amount == null) return '';
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}$${abs.toFixed(2)}`;
 }
 
 // Speed buckets → color (m/s)
@@ -104,13 +112,17 @@ const DaySelector = ({ date, onPrev, onNext }) => {
 
 // ─── Timeline Item ────────────────────────────────────────────────────────────
 
-const TimelineItem = ({ item, index, timezone, isSelected, onPress, visitIndex, locationPoints }) => {
+const TimelineItem = ({ item, index, timezone, isSelected, onPress, visitIndex, locationPoints, purchases }) => {
   const isVisit = item.type === 'visit';
   const color = isVisit ? visitColor(visitIndex ?? 0) : '#6B7280';
   const hasTrack = !isVisit && item.track_points && item.track_points.length > 1;
   const visitGpsCount = isVisit && isSelected && locationPoints
     ? locationPoints.filter(p => p.timeline_id === item.id).length
     : 0;
+  // Purchases matched to this visit
+  const visitPurchases = isVisit && purchases
+    ? purchases.filter(p => p.matched_visit?.visit_id === item.id)
+    : [];
 
   return (
     <TouchableOpacity
@@ -138,8 +150,19 @@ const TimelineItem = ({ item, index, timezone, isSelected, onPress, visitIndex, 
               {item.end_time ? ` – ${fmt(item.end_time, timezone)}` : ' – now'}
               {item.duration ? `  ·  ${fmtDuration(item.duration)}` : ''}
             </Text>
-            {item.purchase_count > 0 ? (
-              <Text style={styles.itemBadge}>💳 {item.purchase_count} purchase{item.purchase_count !== 1 ? 's' : ''}</Text>
+            {/* Matched purchases */}
+            {visitPurchases.length > 0 ? (
+              <View style={styles.purchaseList}>
+                {visitPurchases.map(p => (
+                  <View key={p.id} style={styles.purchaseRow}>
+                    <Text style={styles.purchaseIcon}>💳</Text>
+                    <Text style={styles.purchaseMerchant} numberOfLines={1}>
+                      {p.merchant || p.name}
+                    </Text>
+                    <Text style={styles.purchaseAmount}>{fmtAmount(p.amount)}</Text>
+                  </View>
+                ))}
+              </View>
             ) : null}
             {visitGpsCount > 0 ? (
               <Text style={styles.itemBadge}>📍 {visitGpsCount} GPS point{visitGpsCount !== 1 ? 's' : ''}</Text>
@@ -199,6 +222,7 @@ export default function MapTimelineScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [timeline, setTimeline] = useState(null);
   const [locationPoints, setLocationPoints] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null); // "visit-123" or "travel-456"
@@ -252,13 +276,16 @@ export default function MapTimelineScreen() {
     setError(null);
     setSelectedId(null);
     setLocationPoints([]);
+    setPurchases([]);
     try {
       const dateString = toLocalDateString(date);
-      const [data, pointsData] = await Promise.all([
+      const [data, pointsData, txData] = await Promise.all([
         TimelineService.getTimelineForDate(date, token),
         APIService.getLocationPointsForDate(dateString).catch(() => null),
+        APIService.getTransactionsForDate(dateString).catch(() => null),
       ]);
       setLocationPoints(pointsData?.location_points || []);
+      setPurchases(txData?.transactions || []);
       setTimeline(data);
       const travels = data.travels || [];
       const anyTrack = travels.some(
@@ -358,6 +385,20 @@ export default function MapTimelineScreen() {
     }
   };
 
+  // Build a map of visit_id → visit for purchase coordinate lookup
+  const visitById = {};
+  visits.forEach(v => { visitById[v.id] = v; });
+
+  // Group purchases by visit_id for map rendering
+  const purchasesByVisit = {};
+  purchases.forEach(p => {
+    const vid = p.matched_visit?.visit_id;
+    if (vid) {
+      if (!purchasesByVisit[vid]) purchasesByVisit[vid] = [];
+      purchasesByVisit[vid].push(p);
+    }
+  });
+
   const renderMapContent = () => {
     if (!timeline) return null;
     return (
@@ -368,6 +409,7 @@ export default function MapTimelineScreen() {
           const coord = { latitude: visit.center_latitude, longitude: visit.center_longitude };
           const color = visitColor(i);
           const isSelected = selectedId === `visit-${visit.id}`;
+          const visitPurchases = purchasesByVisit[visit.id] || [];
           return (
             <React.Fragment key={`v-${visit.id}`}>
               <Circle
@@ -384,6 +426,28 @@ export default function MapTimelineScreen() {
                 description={fmt(visit.start_time, tz) + (visit.end_time ? ` – ${fmt(visit.end_time, tz)}` : '')}
                 onPress={() => selectItem({ ...visit, type: 'visit' })}
               />
+              {/* Purchase markers at visit location */}
+              {visitPurchases.map((p, pi) => {
+                // Slightly offset each purchase marker so stacked ones are visible
+                const offset = visitPurchases.length > 1
+                  ? { latitude: coord.latitude + (pi - (visitPurchases.length - 1) / 2) * 0.0001,
+                      longitude: coord.longitude + 0.0002 }
+                  : { latitude: coord.latitude, longitude: coord.longitude + 0.0002 };
+                return (
+                  <Marker
+                    key={`purch-${p.id}`}
+                    coordinate={offset}
+                    title={p.merchant || p.name}
+                    description={fmtAmount(p.amount)}
+                    anchor={{ x: 0.5, y: 1 }}
+                  >
+                    <View style={styles.purchaseMarker}>
+                      <Text style={styles.purchaseMarkerText}>💳</Text>
+                      <Text style={styles.purchaseMarkerAmount}>{fmtAmount(p.amount)}</Text>
+                    </View>
+                  </Marker>
+                );
+              })}
               {/* GPS points for this visit when selected */}
               {isSelected && locationPoints
                 .filter(p => p.timeline_id === visit.id && p.latitude && p.longitude)
@@ -510,6 +574,9 @@ export default function MapTimelineScreen() {
           <View style={styles.statsBar}>
             <Text style={styles.statChip}>📍 {visits.length} visit{visits.length !== 1 ? 's' : ''}</Text>
             <Text style={styles.statChip}>🚗 {travels.length} travel{travels.length !== 1 ? 's' : ''}</Text>
+            {purchases.length > 0 ? (
+              <Text style={styles.statChip}>💳 {purchases.length} purchase{purchases.length !== 1 ? 's' : ''}</Text>
+            ) : null}
             {travels.some((t) => t.distance) ? (
               <Text style={styles.statChip}>
                 📏 {fmtDistance(travels.reduce((s, t) => s + (t.distance || 0), 0))}
@@ -541,8 +608,26 @@ export default function MapTimelineScreen() {
                 onPress={selectItem}
                 visitIndex={item.type === 'visit' ? visitIndexMap[item.id] : null}
                 locationPoints={locationPoints}
+                purchases={purchases}
               />
             )}
+            ListFooterComponent={() => {
+              const unmatched = purchases.filter(p => !p.matched_visit);
+              if (unmatched.length === 0) return null;
+              return (
+                <View style={styles.unmatchedSection}>
+                  <Text style={styles.unmatchedHeader}>💳 Unmatched purchases</Text>
+                  {unmatched.map(p => (
+                    <View key={p.id} style={styles.unmatchedRow}>
+                      <Text style={styles.purchaseMerchant} numberOfLines={1}>
+                        {p.merchant || p.name}
+                      </Text>
+                      <Text style={styles.purchaseAmount}>{fmtAmount(p.amount)}</Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            }}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             onScrollToIndexFailed={() => {}}
@@ -635,4 +720,37 @@ const styles = StyleSheet.create({
   itemSub: { fontSize: 12, color: '#6B7280', marginBottom: 2 },
   itemMeta: { fontSize: 12, color: '#9CA3AF' },
   itemBadge: { fontSize: 11, color: '#6B7280', marginTop: 3 },
+
+  // Purchases in list
+  purchaseList: { marginTop: 6, gap: 3 },
+  purchaseRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F0FDF4', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  purchaseIcon: { fontSize: 11, marginRight: 5 },
+  purchaseMerchant: { flex: 1, fontSize: 12, color: '#374151', fontWeight: '500' },
+  purchaseAmount: { fontSize: 12, color: '#059669', fontWeight: '600', marginLeft: 8 },
+
+  // Unmatched purchases footer
+  unmatchedSection: {
+    marginHorizontal: 12, marginTop: 8, marginBottom: 16,
+    backgroundColor: '#FFF7ED', borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: '#FED7AA',
+  },
+  unmatchedHeader: { fontSize: 12, fontWeight: '600', color: '#92400E', marginBottom: 8 },
+  unmatchedRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#FED7AA',
+  },
+
+  // Purchase map markers
+  purchaseMarker: {
+    backgroundColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3,
+    alignItems: 'center', borderWidth: 1.5, borderColor: '#059669',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2, shadowRadius: 2, elevation: 3,
+  },
+  purchaseMarkerText: { fontSize: 12 },
+  purchaseMarkerAmount: { fontSize: 10, color: '#059669', fontWeight: '700' },
 });
