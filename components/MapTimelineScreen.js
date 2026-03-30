@@ -270,6 +270,33 @@ export default function MapTimelineScreen() {
     return () => sub.remove();
   }, [load, selectedDate]);
 
+  // Returns the item (visit or travel) that is currently active or most recently ended.
+  // Only applies when viewing today.
+  const getCurrentItem = useCallback((data, isToday) => {
+    if (!isToday) return null;
+    const visits = data.visits || [];
+    const travels = data.travels || [];
+    const allItems = [
+      ...visits.map((v) => ({ ...v, type: 'visit' })),
+      ...travels.map((t) => ({ ...t, type: 'travel' })),
+    ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+
+    if (allItems.length === 0) return null;
+
+    const now = new Date();
+    // Prefer an item that is currently in progress
+    const active = allItems.find((item) => {
+      const start = new Date(item.start_time);
+      const end = item.end_time ? new Date(item.end_time) : null;
+      return start <= now && (!end || end >= now);
+    });
+    if (active) return active;
+
+    // Otherwise, the most recently ended item
+    const past = allItems.filter((item) => item.end_time && new Date(item.end_time) < now);
+    return past.length > 0 ? past[past.length - 1] : allItems[0];
+  }, []);
+
   const load = useCallback(async (date) => {
     if (!token) return;
     setLoading(true);
@@ -279,6 +306,7 @@ export default function MapTimelineScreen() {
     setPurchases([]);
     try {
       const dateString = toLocalDateString(date);
+      const isToday = dateString === toLocalDateString(new Date());
       const [data, pointsData, txData] = await Promise.all([
         TimelineService.getTimelineForDate(date, token),
         APIService.getLocationPointsForDate(dateString).catch(() => null),
@@ -293,7 +321,7 @@ export default function MapTimelineScreen() {
       );
       setHasTrackData(anyTrack);
       LoggingService.info('map.load.result', {
-        date: toLocalDateString(date),
+        date: dateString,
         visits: (data.visits || []).length,
         travels: travels.length,
         from_cache: data.fromCache ?? false,
@@ -303,21 +331,88 @@ export default function MapTimelineScreen() {
         travel_durations: travels.map(t => t.duration),
         has_timeline_key: !!data.timeline,
       });
-      // Fit map
-      const bounds = TimelineService.getTimelineBounds(data);
-      if (bounds && mapReady) {
-        mapRef.current?.animateToRegion(bounds, 600);
-      } else if (bounds) {
-        setDeviceRegion(bounds);
+
+      // Auto-focus: current/most-recent item for today, otherwise fit all
+      const currentItem = getCurrentItem(data, isToday);
+      if (currentItem) {
+        const newId = `${currentItem.type}-${currentItem.id}`;
+        setSelectedId(newId);
+        // Pan map to it
+        let region = null;
+        if (currentItem.type === 'visit' && currentItem.center_latitude) {
+          region = {
+            latitude: currentItem.center_latitude,
+            longitude: currentItem.center_longitude,
+            latitudeDelta: 0.015,
+            longitudeDelta: 0.015,
+          };
+        } else if (currentItem.type === 'travel') {
+          const pts = currentItem.track_points && currentItem.track_points.length > 1
+            ? currentItem.track_points : null;
+          if (pts) {
+            const lats = pts.map((p) => p.latitude);
+            const lngs = pts.map((p) => p.longitude);
+            region = {
+              latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
+              longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
+              latitudeDelta: Math.max((Math.max(...lats) - Math.min(...lats)) * 1.4, 0.01),
+              longitudeDelta: Math.max((Math.max(...lngs) - Math.min(...lngs)) * 1.4, 0.01),
+            };
+          } else if (currentItem.center_latitude) {
+            region = {
+              latitude: currentItem.center_latitude,
+              longitude: currentItem.center_longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            };
+          }
+        }
+        if (region) {
+          if (mapReady) mapRef.current?.animateToRegion(region, 600);
+          else setDeviceRegion(region);
+        }
+        // Scroll list to current item — defer so FlatList has rendered
+        setTimeout(() => {
+          const allItems = [
+            ...(data.visits || []).map((v) => ({ ...v, type: 'visit' })),
+            ...(data.travels || []).map((t) => ({ ...t, type: 'travel' })),
+          ].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+          const idx = allItems.findIndex((i) => i.type === currentItem.type && i.id === currentItem.id);
+          if (idx >= 0) listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
+        }, 500);
+      } else {
+        // No items or not today — fall back to fitting all data
+        const bounds = TimelineService.getTimelineBounds(data);
+        if (bounds && mapReady) mapRef.current?.animateToRegion(bounds, 600);
+        else if (bounds) setDeviceRegion(bounds);
       }
     } catch (err) {
       setError(err && err.message ? err.message : 'Failed to load timeline');
     } finally {
       setLoading(false);
     }
-  }, [token, mapReady]);
+  }, [token, mapReady, getCurrentItem]);
 
   useEffect(() => { load(selectedDate); }, [selectedDate, token]);
+
+  // If map becomes ready after data is already loaded, pan to current item
+  useEffect(() => {
+    if (!mapReady || !timeline) return;
+    const isToday = toLocalDateString(selectedDate) === toLocalDateString(new Date());
+    const currentItem = getCurrentItem(timeline, isToday);
+    if (currentItem) {
+      let region = null;
+      if (currentItem.type === 'visit' && currentItem.center_latitude) {
+        region = { latitude: currentItem.center_latitude, longitude: currentItem.center_longitude, latitudeDelta: 0.015, longitudeDelta: 0.015 };
+      } else if (currentItem.type === 'travel' && currentItem.center_latitude) {
+        region = { latitude: currentItem.center_latitude, longitude: currentItem.center_longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+      }
+      if (region) mapRef.current?.animateToRegion(region, 600);
+    } else {
+      const bounds = TimelineService.getTimelineBounds(timeline);
+      if (bounds) mapRef.current?.animateToRegion(bounds, 600);
+    }
+  }, [mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prevDay = () => {
     const d = new Date(selectedDate);
