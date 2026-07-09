@@ -49,13 +49,16 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@testing-library/react-native": "^12.9.0",
+    "expo-fmt-consteval-fix": "^1.0.0",
     "jest": "^29.7.0",
     "jest-expo": "^53.0.0",
     "react-test-renderer": "19.0.0"
   },
   "jest": {
     "preset": "jest-expo",
-    "setupFilesAfterEnv": ["<rootDir>/jest-setup.js"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest-setup.js"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
     ]
