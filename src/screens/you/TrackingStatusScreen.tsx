@@ -13,6 +13,7 @@ import { LocationService, LocationSyncService, LoggingService } from '../../../s
 
 // Import components
 import { BuildInfo } from '../../../components/BuildInfo';
+import ErrorBoundary from '../../../components/ErrorBoundary';
 
 // Import hooks and contexts
 import { useAuth } from '../../../AuthContext';
@@ -374,98 +375,124 @@ export function TrackingStatusScreen() {
     }
   };
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ paddingTop: spacing.lg, paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
-    >
-      {/* Overall status banner */}
+  // Full-screen blocking states (port of the old <Screen loading={...} error={...}> semantics)
+  if (locationLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (error || locationError) {
+    return (
       <View style={{
-        flexDirection: 'row', alignItems: 'center', backgroundColor: status.bg,
-        borderRadius: radii.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.lg,
+        flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
       }}>
-        <Icon name={status.icon} size={20} color={status.color} />
-        <Text style={[type.bodyBold, { color: status.color, marginLeft: spacing.sm }]}>{status.text}</Text>
-        {locationLoading ? (
-          <ActivityIndicator size="small" color={status.color} style={{ marginLeft: spacing.sm }} />
-        ) : null}
-      </View>
-
-      {/* Error banner */}
-      {error || locationError ? (
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', backgroundColor: colors.dangerSoft,
-          borderRadius: radii.md, padding: spacing.md, marginBottom: spacing.lg,
-        }}>
-          <Text style={[type.caption, { flex: 1, color: colors.danger }]}>{error || locationError}</Text>
-          <Pressable onPress={() => setError(null)} accessibilityRole="button">
-            <Text style={[type.caption, { color: colors.danger, fontWeight: '700', marginLeft: spacing.md }]}>Dismiss</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {/* Tracking detail rows */}
-      <View style={{ backgroundColor: colors.surface, borderRadius: 16, paddingVertical: spacing.xs, marginBottom: spacing.lg }}>
-        <ListRow icon="wifi" title="Network"
-          right={<Text style={[type.body, { color: colors.textSecondary }]}>{isOnline ? 'Online' : 'Offline'}</Text>} />
-        <ListRow icon="shield-check-outline" title="Location permission"
-          right={<Text style={[type.body, { color: colors.textSecondary }]}>
-            {locationPermission === null ? 'Checking…' : locationPermission ? 'Granted (Always)' : 'Denied'}
-          </Text>} />
-        <ListRow icon="crosshairs-gps" title="Tracking active"
-          right={<Text style={[type.body, { color: colors.textSecondary }]}>{locationTrackingDetails.isTracking ? 'Yes' : 'No'}</Text>} />
-        <ListRow icon="cog-outline" title="Task registered"
-          right={<Text style={[type.body, { color: colors.textSecondary }]}>{locationTrackingDetails.isTaskRegistered ? 'Yes' : 'No'}</Text>} />
-        <ListRow icon="shield-lock-outline" title="Background permission"
-          right={<Text style={[type.body, { color: colors.textSecondary }]}>{locationTrackingDetails.hasBackgroundPermission ? 'Granted' : 'Denied'}</Text>} />
-        <ListRow icon="sync" title="Data sync"
-          subtitle={lastSyncTime ? `Synced ${lastSyncTime.toLocaleTimeString()}` : syncStatus === 'syncing' ? 'Syncing…' : 'Waiting for data…'}
-          right={<Text style={[type.body, { color: colors.textSecondary }]}>{syncStatus}</Text>} />
-        <ListRow icon="server-network" title="API endpoint"
-          subtitle={process.env.EXPO_PUBLIC_API_URL || 'Not configured'} />
-        {showDebug ? (
-          <ListRow icon="bell-outline" title="Debug notifications"
-            subtitle="Local notifications for location/sync events"
-            right={
-              <Switch
-                value={debugNotificationsEnabled}
-                onValueChange={handleToggleDebugNotifications}
-                trackColor={{ false: colors.border, true: colors.primarySoft }}
-                thumbColor={debugNotificationsEnabled ? colors.primary : colors.surfaceAlt}
-              />
-            } />
-        ) : null}
-      </View>
-
-      {/* Actions */}
-      <Pressable
-        onPress={handleGetCurrentLocation}
-        style={{
-          backgroundColor: colors.primary, borderRadius: radii.md, paddingVertical: spacing.md,
-          alignItems: 'center', marginBottom: spacing.md,
-        }}
-      >
-        <Text style={[type.bodyBold, { color: colors.onPrimary }]}>Get Current Location</Text>
-      </Pressable>
-
-      <Pressable
-        onPress={handleRestartTracking}
-        style={{
-          backgroundColor: colors.surfaceAlt, borderRadius: radii.md, paddingVertical: spacing.md,
-          alignItems: 'center', marginBottom: spacing.xl,
-        }}
-      >
-        <Text style={[type.bodyBold, { color: colors.textPrimary }]}>Restart Location Tracking</Text>
-      </Pressable>
-
-      {/* Build information */}
-      <BuildInfo style={undefined} />
-
-      {Constants.expoConfig?.extra?.buildProfile !== 'production' ? (
-        <Text style={[type.caption, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.sm }]}>
-          Build profile: {Constants.expoConfig?.extra?.buildProfile || 'dev'}
+        <Icon name="alert-circle-outline" size={40} color={colors.danger} />
+        <Text style={[type.heading, { color: colors.textPrimary, marginTop: spacing.md, textAlign: 'center' }]}>
+          Something went wrong
         </Text>
-      ) : null}
-    </ScrollView>
+        <Text style={[type.body, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
+          {error || locationError}
+        </Text>
+        <Pressable
+          onPress={() => setError(null)}
+          style={{
+            marginTop: spacing.lg, backgroundColor: colors.primary, borderRadius: radii.md,
+            paddingVertical: spacing.md, paddingHorizontal: spacing.xl,
+          }}
+        >
+          <Text style={[type.bodyBold, { color: colors.onPrimary }]}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <ErrorBoundary name="TrackingStatusScreen">
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ paddingTop: spacing.lg, paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
+      >
+        {/* Overall status banner */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', backgroundColor: status.bg,
+          borderRadius: radii.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.lg,
+        }}>
+          <Icon name={status.icon} size={20} color={status.color} />
+          <Text style={[type.bodyBold, { color: status.color, marginLeft: spacing.sm }]}>{status.text}</Text>
+        </View>
+
+        {/* Tracking detail rows */}
+        <View style={{ backgroundColor: colors.surface, borderRadius: 16, paddingVertical: spacing.xs, marginBottom: spacing.lg }}>
+          <ListRow icon="wifi" title="Network"
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>{isOnline ? 'Online' : 'Offline'}</Text>} />
+          <ListRow icon="shield-check-outline" title="Location permission"
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>
+              {locationPermission === null ? 'Checking…' : locationPermission ? 'Granted (Always)' : 'Denied'}
+            </Text>} />
+          <ListRow icon="crosshairs-gps" title="Location tracking"
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>
+              {isTrackingLocation ? 'Active' : locationPermission === false ? 'Permission denied' : 'Starting…'}
+            </Text>} />
+          <ListRow icon="map-marker-path" title="Tracking active"
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>{locationTrackingDetails.isTracking ? 'Yes' : 'No'}</Text>} />
+          <ListRow icon="cog-outline" title="Task registered"
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>{locationTrackingDetails.isTaskRegistered ? 'Yes' : 'No'}</Text>} />
+          <ListRow icon="identifier" title="Background task"
+            right={<Text style={[type.body, { color: colors.textSecondary }]} numberOfLines={1}>{LOCATION_TASK_NAME}</Text>} />
+          <ListRow icon="shield-lock-outline" title="Background permission"
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>{locationTrackingDetails.hasBackgroundPermission ? 'Granted' : 'Denied'}</Text>} />
+          <ListRow icon="sync" title="Data sync"
+            subtitle={lastSyncTime ? `Synced ${lastSyncTime.toLocaleTimeString()}` : syncStatus === 'syncing' ? 'Syncing…' : 'Waiting for data…'}
+            right={<Text style={[type.body, { color: colors.textSecondary }]}>{syncStatus}</Text>} />
+          <ListRow icon="server-network" title="API endpoint"
+            subtitle={process.env.EXPO_PUBLIC_API_URL || 'Not configured'} />
+          {showDebug ? (
+            <ListRow icon="bell-outline" title="Debug notifications"
+              subtitle="Local notifications for location/sync events"
+              right={
+                <Switch
+                  value={debugNotificationsEnabled}
+                  onValueChange={handleToggleDebugNotifications}
+                  trackColor={{ false: colors.border, true: colors.primarySoft }}
+                  thumbColor={debugNotificationsEnabled ? colors.primary : colors.surfaceAlt}
+                />
+              } />
+          ) : null}
+        </View>
+
+        {/* Actions */}
+        <Pressable
+          onPress={handleGetCurrentLocation}
+          style={{
+            backgroundColor: colors.primary, borderRadius: radii.md, paddingVertical: spacing.md,
+            alignItems: 'center', marginBottom: spacing.md,
+          }}
+        >
+          <Text style={[type.bodyBold, { color: colors.onPrimary }]}>Get Current Location</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={handleRestartTracking}
+          style={{
+            backgroundColor: colors.surfaceAlt, borderRadius: radii.md, paddingVertical: spacing.md,
+            alignItems: 'center', marginBottom: spacing.xl,
+          }}
+        >
+          <Text style={[type.bodyBold, { color: colors.textPrimary }]}>Restart Location Tracking</Text>
+        </Pressable>
+
+        {/* Build information */}
+        <BuildInfo style={undefined} />
+
+        {Constants.expoConfig?.extra?.buildProfile !== 'production' ? (
+          <Text style={[type.caption, { color: colors.textTertiary, textAlign: 'center', marginTop: spacing.sm }]}>
+            Build profile: {Constants.expoConfig?.extra?.buildProfile || 'dev'}
+          </Text>
+        ) : null}
+      </ScrollView>
+    </ErrorBoundary>
   );
 }
