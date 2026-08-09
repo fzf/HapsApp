@@ -214,3 +214,17 @@ describe('HeartbeatService', () => {
     });
   });
 });
+
+describe('AppStateContext heartbeat integration', () => {
+  it('calls a method that actually exists on HeartbeatService', () => {
+    const HeartbeatService = require('../services/HeartbeatService').default;
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '../contexts/AppStateContext.js'), 'utf8');
+    // Every HeartbeatService.<method>( call in the context must exist on the service
+    const calls = [...source.matchAll(/HeartbeatService\.(\w+)\(/g)].map(m => m[1]);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const method of calls) {
+      expect(typeof HeartbeatService[method]).toBe('function');
+    }
+  });
+});
