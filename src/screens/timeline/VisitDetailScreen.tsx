@@ -24,7 +24,7 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const visitId: number = route.params.visitId;
-  const { visit, loading, busy, error, clearError, selectLocation, refreshGeocode } = useVisitDetail(visitId);
+  const { visit, loading, busy, error, clearError, reload, selectLocation, refreshGeocode } = useVisitDetail(visitId);
 
   useEffect(() => {
     if (visit) {
@@ -53,7 +53,7 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
           {error}
         </Text>
         <Pressable
-          onPress={clearError}
+          onPress={reload}
           style={{
             marginTop: spacing.lg, backgroundColor: colors.primary, borderRadius: radii.md,
             paddingVertical: spacing.md, paddingHorizontal: spacing.xl,
@@ -66,7 +66,27 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
   }
 
   if (!visit) {
-    return null;
+    // Defensive fallback: loading is false, there's no error, yet visit is still
+    // null (shouldn't normally happen, but never render a silent blank screen).
+    return (
+      <View style={{
+        flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
+      }}>
+        <Icon name="alert-circle-outline" size={40} color={colors.textTertiary} />
+        <Text style={[type.heading, { color: colors.textPrimary, marginTop: spacing.md, textAlign: 'center' }]}>
+          Couldn't load visit
+        </Text>
+        <Pressable
+          onPress={reload}
+          style={{
+            marginTop: spacing.lg, backgroundColor: colors.primary, borderRadius: radii.md,
+            paddingVertical: spacing.md, paddingHorizontal: spacing.xl,
+          }}
+        >
+          <Text style={[type.bodyBold, { color: colors.onPrimary }]}>Retry</Text>
+        </Pressable>
+      </View>
+    );
   }
 
   const badge = sourceBadge(visit);
@@ -120,7 +140,10 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
 
       {/* Wrong place? */}
       <Text style={[type.heading, { color: colors.textPrimary, marginBottom: spacing.sm }]}>Wrong place?</Text>
-      <View style={{ backgroundColor: colors.surface, borderRadius: radii.lg, paddingVertical: spacing.xs, marginBottom: spacing.lg }}>
+      <View style={{
+        backgroundColor: colors.surface, borderRadius: radii.lg, paddingVertical: spacing.xs, marginBottom: spacing.lg,
+        opacity: busy ? 0.5 : 1,
+      }}>
         {suggestions.length === 0 ? (
           <Text style={[type.caption, { color: colors.textSecondary, padding: spacing.lg }]}>
             No alternative places found

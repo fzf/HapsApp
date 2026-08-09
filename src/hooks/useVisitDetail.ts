@@ -14,6 +14,7 @@ export function useVisitDetail(visitId: number): {
   busy: boolean;
   error: string | null;
   clearError: () => void;
+  reload: () => Promise<void>;
   selectLocation: (locationId: number) => Promise<void>;
   refreshGeocode: (force?: boolean) => Promise<void>;
 } {
@@ -101,5 +102,5 @@ export function useVisitDetail(visitId: number): {
     }
   }, [visitId, setBusyGuarded]);
 
-  return { visit, loading, busy, error, clearError, selectLocation, refreshGeocode };
+  return { visit, loading, busy, error, clearError, reload: load, selectLocation, refreshGeocode };
 }

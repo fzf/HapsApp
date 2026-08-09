@@ -162,6 +162,27 @@ it('selectLocation is a no-op while a mutation is already in flight', async () =
   expect(APIService.updateVisitLocation).toHaveBeenCalledTimes(1);
 });
 
+it('reload re-fetches and populates visit after a failed initial fetch', async () => {
+  (APIService.getVisit as jest.Mock).mockRejectedValueOnce(new Error('network down'));
+
+  const { result } = renderHook(() => useVisitDetail(1));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(result.current.visit).toBeNull();
+  expect(result.current.error).toBe('network down');
+
+  (APIService.getVisit as jest.Mock).mockResolvedValueOnce(baseVisit());
+
+  await act(async () => {
+    await result.current.reload();
+  });
+
+  expect(APIService.getVisit).toHaveBeenCalledTimes(2);
+  expect(result.current.loading).toBe(false);
+  expect(result.current.visit?.id).toBe(1);
+  expect(result.current.error).toBeNull();
+});
+
 it('clearError resets error state', async () => {
   (APIService.getVisit as jest.Mock).mockResolvedValue(baseVisit());
   (APIService.geocodeVisit as jest.Mock).mockRejectedValue(new Error('boom'));
