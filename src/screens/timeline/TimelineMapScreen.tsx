@@ -23,8 +23,27 @@ export function TimelineMapScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [initialRegion, setInitialRegion] = useState<Region | undefined>(undefined);
+  // Holds the device-location fallback region so it can be applied via animateToRegion
+  // once the native map is ready (initialRegion is read only at native mount, so setting
+  // it after mount is otherwise a no-op — see finding 1).
+  const deviceRegionRef = useRef<Region | null>(null);
+  // Live mirror of `mapReady` for use inside the location-fetch closure below, whose
+  // effect only runs once (mount) so its captured `mapReady` would otherwise be stale.
+  const mapReadyRef = useRef(false);
+  useEffect(() => { mapReadyRef.current = mapReady; }, [mapReady]);
 
   const snapPoints = useMemo(() => ['12%', '45%', '88%'], []);
+
+  // Tracks whether data-driven auto-focus (below) has run, so the device-location
+  // fallback never fights it once real timeline data takes over the camera.
+  const lastAutoFocusKey = useRef<string | null>(null);
+
+  // Only pan to the device-location fallback if data-driven auto-focus hasn't
+  // already taken over the camera — never fight the timeline auto-focus.
+  const canApplyDeviceRegion = useCallback(
+    () => lastAutoFocusKey.current === null || state.items.length === 0,
+    [state.items.length],
+  );
 
   // Initial region: device location fallback (port of MapTimelineScreen.js:235-250)
   useEffect(() => {
@@ -33,14 +52,32 @@ export function TimelineMapScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          setInitialRegion((r) => r ?? {
+          const region: Region = {
             latitude: loc.coords.latitude, longitude: loc.coords.longitude,
             latitudeDelta: 0.05, longitudeDelta: 0.05,
-          });
+          };
+          deviceRegionRef.current = region;
+          if (mapReadyRef.current) {
+            // Map already mounted: setInitialRegion would be a no-op, so pan explicitly.
+            if (canApplyDeviceRegion()) mapRef.current?.animateToRegion(region, 600);
+          } else {
+            setInitialRegion((r) => r ?? region);
+          }
         }
       } catch { /* keep undefined; map uses its default */ }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ordering race: the device-location effect above may resolve before the map
+  // reports ready, in which case the branch above already went through
+  // setInitialRegion — but initialRegion is native-mount-only, so once the map
+  // actually becomes ready we still need to explicitly pan to it here.
+  useEffect(() => {
+    if (!mapReady || !deviceRegionRef.current) return;
+    if (canApplyDeviceRegion()) mapRef.current?.animateToRegion(deviceRegionRef.current, 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
 
   const focusItem = useCallback((item: TimelineItem, animate = true) => {
     const region = regionForItem(item);
@@ -60,7 +97,6 @@ export function TimelineMapScreen() {
   }, [focusItem]);
 
   // Auto-focus current item on load (port of MapTimelineScreen.js:335-388)
-  const lastAutoFocusKey = useRef<string | null>(null);
   useEffect(() => {
     if (state.loading || !state.day) return;
     const key = `${state.date.toDateString()}-${state.items.length}-${mapReady}`;

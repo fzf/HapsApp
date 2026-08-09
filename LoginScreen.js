@@ -8,6 +8,8 @@ import {
   ScrollView,
   SafeAreaView,
   StyleSheet,
+  Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
@@ -19,8 +21,8 @@ import { Alert as CustomAlert } from './components/Alert';
 
 export default function LoginScreen() {
   const navigation = useNavigation();
-  const { colors } = useTheme();
-  const styles = createStyles(colors);
+  const { colors, radii } = useTheme();
+  const styles = createStyles(colors, radii);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -104,16 +106,22 @@ export default function LoginScreen() {
                 </View>
 
                 {/* Login Button */}
-                <Button
-                  variant="primary"
-                  size="lg"
-                  loading={loading}
-                  disabled={loading}
+                {/* Themed Pressable instead of <Button variant="primary">: Button.js hardcodes
+                    white label/spinner text, which is illegible against colors.primary in dark
+                    mode (#8AB4F8). Button.js has no text-style override prop, so we replicate its
+                    layout here with theme-aware text/spinner color (colors.onPrimary). */}
+                <Pressable
                   onPress={handleLogin}
-                  style={styles.loginButton}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  style={[styles.loginButton, loading && styles.loginButtonDisabled]}
                 >
-                  {loading ? 'Signing In...' : 'Sign In'}
-                </Button>
+                  {loading ? (
+                    <ActivityIndicator size="small" color={colors.onPrimary} />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Sign In</Text>
+                  )}
+                </Pressable>
 
                 {/* Switch to Register */}
                 <Button
@@ -139,7 +147,7 @@ export default function LoginScreen() {
   );
 }
 
-const createStyles = (colors) =>
+const createStyles = (colors, radii) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -201,9 +209,23 @@ const createStyles = (colors) =>
       paddingVertical: 10,
     },
     loginButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
       width: '100%',
       marginBottom: 16,
       backgroundColor: colors.primary,
+      borderRadius: radii.sm,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+    },
+    loginButtonDisabled: {
+      opacity: 0.5,
+    },
+    loginButtonText: {
+      fontWeight: '500',
+      fontSize: 14,
+      color: colors.onPrimary,
     },
     switchButton: {
       width: '100%',

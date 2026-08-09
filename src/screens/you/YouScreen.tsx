@@ -20,7 +20,7 @@ export function YouScreen({ navigation }: { navigation: any }) {
           alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm,
         }}>
           <Text style={[type.title, { color: colors.primary }]}>
-            {(user?.email ?? '?')[0].toUpperCase()}
+            {user?.email?.[0]?.toUpperCase() ?? '?'}
           </Text>
         </View>
         <Text style={[type.heading, { color: colors.textPrimary }]}>{user?.email ?? ''}</Text>

@@ -23,7 +23,7 @@ jest.mock('../../services/LoggingService', () => ({
 import TimelineService from '../../services/TimelineService';
 import { useTimelineDay } from '../../src/hooks/useTimelineDay';
 
-const day = (visits = [], travels = []) => ({ visits, travels, timezone: 'America/Los_Angeles' });
+const day = (visits: any[] = [], travels: any[] = []) => ({ visits, travels, timezone: 'America/Los_Angeles' });
 
 it('loads and merges items sorted by start_time', async () => {
   (TimelineService.getTimelineForDate as jest.Mock).mockResolvedValue(day(

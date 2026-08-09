@@ -83,6 +83,7 @@ export function MapOverlays({ day, selectedId, locationPoints, purchases, onSele
                   title={p.merchant || p.name}
                   description={fmtAmount(p.amount)}
                   anchor={{ x: 0.5, y: 1 }}
+                  tracksViewChanges={false}
                 >
                   <View style={{
                     backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3,
