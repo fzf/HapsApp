@@ -44,6 +44,15 @@ export function TimelineMapScreen() {
     () => lastAutoFocusKey.current === null || state.items.length === 0,
     [state.items.length],
   );
+  // Live ref to the guard above, reassigned every render. The mount effect below
+  // has `[]` deps (it must only fetch device location / request permission once),
+  // so a closure over `canApplyDeviceRegion` captured there would be pinned to the
+  // function instance — and the `state.items.length` it closed over — from the
+  // FIRST render forever, permanently reading `state.items.length === 0` even
+  // after data auto-focus has run and populated items. Calling
+  // `canApplyDeviceRegionRef.current()` instead always reads the latest guard.
+  const canApplyDeviceRegionRef = useRef(canApplyDeviceRegion);
+  canApplyDeviceRegionRef.current = canApplyDeviceRegion;
 
   // Initial region: device location fallback (port of MapTimelineScreen.js:235-250)
   useEffect(() => {
@@ -59,7 +68,7 @@ export function TimelineMapScreen() {
           deviceRegionRef.current = region;
           if (mapReadyRef.current) {
             // Map already mounted: setInitialRegion would be a no-op, so pan explicitly.
-            if (canApplyDeviceRegion()) mapRef.current?.animateToRegion(region, 600);
+            if (canApplyDeviceRegionRef.current()) mapRef.current?.animateToRegion(region, 600);
           } else {
             setInitialRegion((r) => r ?? region);
           }
@@ -72,10 +81,15 @@ export function TimelineMapScreen() {
   // Ordering race: the device-location effect above may resolve before the map
   // reports ready, in which case the branch above already went through
   // setInitialRegion — but initialRegion is native-mount-only, so once the map
-  // actually becomes ready we still need to explicitly pan to it here.
+  // actually becomes ready we still need to explicitly pan to it here. This
+  // effect re-runs fresh on every `mapReady` flip, so its closure over
+  // `canApplyDeviceRegion` is not stale — but we route through the same live ref
+  // for consistency (and in case `mapReady` never flips again after data
+  // auto-focus already ran, which would otherwise leave a stale closure here too
+  // if this effect had fired earlier and not re-run since).
   useEffect(() => {
     if (!mapReady || !deviceRegionRef.current) return;
-    if (canApplyDeviceRegion()) mapRef.current?.animateToRegion(deviceRegionRef.current, 600);
+    if (canApplyDeviceRegionRef.current()) mapRef.current?.animateToRegion(deviceRegionRef.current, 600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady]);
 
