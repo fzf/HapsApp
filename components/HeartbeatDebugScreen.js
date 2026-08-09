@@ -136,8 +136,8 @@ const HeartbeatDebugScreen = () => {
             const todayString = toLocalDateString(new Date());
             setIsProcessing(true);
             try {
-              await APIService.reprocessDay(todayString, 'full');
-              Alert.alert('Rebuild', 'Today\'s timeline rebuilt successfully.');
+              const result = await APIService.reprocessDay(todayString, 'full');
+              Alert.alert('Rebuild', result.message || 'Today\'s timeline rebuilt successfully.');
             } catch (error) {
               Alert.alert('Error', error.message);
             } finally {

@@ -162,6 +162,22 @@ it('selectLocation is a no-op while a mutation is already in flight', async () =
   expect(APIService.updateVisitLocation).toHaveBeenCalledTimes(1);
 });
 
+it('selectLocation is a no-op when the id is already the visit\'s current location', async () => {
+  (APIService.getVisit as jest.Mock).mockResolvedValue(
+    baseVisit({ location: { id: 10, name: 'Cafe', address: '1 Main St', latitude: 1, longitude: 1 } })
+  );
+
+  const { result } = renderHook(() => useVisitDetail(1));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  await act(async () => {
+    await result.current.selectLocation(10);
+  });
+
+  expect(APIService.updateVisitLocation).toHaveBeenCalledTimes(0);
+  expect(result.current.busy).toBe(false);
+});
+
 it('reload re-fetches and populates visit after a failed initial fetch', async () => {
   (APIService.getVisit as jest.Mock).mockRejectedValueOnce(new Error('network down'));
 

@@ -195,6 +195,7 @@ Route params: `VisitDetail: { visitId: number }`.
     `'purchase_match'` → "From purchase" (successSoft/success), else
     "Auto-detected · <round(confidence*100)>%" (surfaceAlt/textSecondary);
     time range + duration caption (reuse `fmtTime`/`fmtDuration`).
+  - Purchases section (route-param purchases from the day data): merchant + amount rows, successSoft chips (spec-mandated; restored in final fix wave).
   - "Wrong place?" section (`type.heading`): one `ListRow` per suggestion in
     order — icon `map-marker-outline`, title name, subtitle
     `[address, providers[0]].filter(Boolean).join(' · ')`,

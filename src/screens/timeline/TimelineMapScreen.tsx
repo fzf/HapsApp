@@ -114,8 +114,12 @@ export function TimelineMapScreen() {
   }, [focusItem]);
 
   const onDetailPress = useCallback((item: TimelineItem) => {
-    navigation.navigate('VisitDetail', { visitId: item.id });
-  }, [navigation]);
+    navigation.navigate('VisitDetail', {
+      visitId: item.id,
+      timezone: state.timezone,
+      purchases: state.purchases.filter((p) => p.matched_visit?.visit_id === item.id),
+    });
+  }, [navigation, state.timezone, state.purchases]);
 
   // Refresh the day's data when this screen regains focus after a visit was
   // edited in VisitDetail (which sets timelineNeedsRefresh.current = true).

@@ -8,7 +8,7 @@ function errorMessage(err: any): string {
   return (err && err.message) || 'Something went wrong';
 }
 
-export function useVisitDetail(visitId: number): {
+export function useVisitDetail(visitId: number | undefined): {
   visit: TimelineVisit | null;
   loading: boolean;
   busy: boolean;
@@ -33,6 +33,12 @@ export function useVisitDetail(visitId: number): {
   }, []);
 
   const load = useCallback(async () => {
+    if (visitId == null) {
+      // No visitId to fetch (e.g. missing/malformed route params) — skip the
+      // fetch entirely and let the caller render its "couldn't load" fallback.
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -52,6 +58,7 @@ export function useVisitDetail(visitId: number): {
   const clearError = useCallback(() => setError(null), []);
 
   const selectLocation = useCallback(async (locationId: number) => {
+    if (visit?.location?.id === locationId) return;
     if (!visit || busyRef.current) return;
     const previous = visit;
     const suggestion = (visit.suggested_locations || []).find((s) => s.id === locationId);

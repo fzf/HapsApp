@@ -4,9 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon, ListRow } from '../../ui';
 import { useVisitDetail } from '../../hooks/useVisitDetail';
-import { fmtTime, fmtDuration } from './format';
+import { fmtTime, fmtDuration, fmtAmount } from './format';
 import { isAdminUser } from '../../../utils/adminUtils';
 import { useAuth } from '../../../AuthContext';
+import { Purchase } from '../../api/types';
 
 function sourceBadge(visit: { location_source?: string; location_confidence_score?: number }) {
   if (visit.location_source === 'manual') {
@@ -23,7 +24,9 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
   const { colors, spacing, type, radii } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const visitId: number = route.params.visitId;
+  const visitId: number | undefined = route.params?.visitId;
+  const timezone: string | undefined = route.params?.timezone;
+  const purchases: Purchase[] = route.params?.purchases ?? [];
   const { visit, loading, busy, error, clearError, reload, selectLocation, refreshGeocode } = useVisitDetail(visitId);
 
   useEffect(() => {
@@ -91,7 +94,7 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
 
   const badge = sourceBadge(visit);
   const suggestions = visit.suggested_locations || [];
-  const timeRange = `${fmtTime(visit.start_time)}${visit.end_time ? ` – ${fmtTime(visit.end_time)}` : ' – now'}`;
+  const timeRange = `${fmtTime(visit.start_time, timezone)}${visit.end_time ? ` – ${fmtTime(visit.end_time, timezone)}` : ' – now'}`;
 
   const handleRefreshLongPress = () => {
     if (!isAdminUser(user) || busy) return;
@@ -137,6 +140,28 @@ export function VisitDetailScreen({ route, navigation }: { route: any; navigatio
           {timeRange}{visit.duration ? `  ·  ${fmtDuration(visit.duration)}` : ''}
         </Text>
       </View>
+
+      {/* Purchases */}
+      {purchases.length > 0 ? (
+        <>
+          <Text style={[type.heading, { color: colors.textPrimary, marginBottom: spacing.sm }]}>Purchases</Text>
+          <View style={{ marginBottom: spacing.lg }}>
+            {purchases.map((p) => (
+              <View key={p.id} style={{
+                flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs,
+                backgroundColor: colors.successSoft, borderRadius: radii.sm,
+                paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
+              }}>
+                <Icon name="credit-card-outline" size={13} color={colors.success} />
+                <Text style={[type.caption, { flex: 1, color: colors.textPrimary, marginLeft: 6 }]} numberOfLines={1}>
+                  {p.merchant ?? p.name}
+                </Text>
+                <Text style={[type.caption, { color: colors.success, fontWeight: '600' }]}>{fmtAmount(p.amount)}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       {/* Wrong place? */}
       <Text style={[type.heading, { color: colors.textPrimary, marginBottom: spacing.sm }]}>Wrong place?</Text>
