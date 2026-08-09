@@ -91,7 +91,7 @@ export default function TransactionsScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
-      const result = await APIService.getTransactions(toLocalDateString(date));
+      const result = await APIService.getTransactionsForDate(toLocalDateString(date));
       setData(result);
     } catch (err) {
       setError(err && err.message ? err.message : 'Failed to load transactions');
