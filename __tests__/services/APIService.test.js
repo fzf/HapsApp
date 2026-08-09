@@ -303,3 +303,14 @@ describe('Phase 3 visit editing methods', () => {
     }
   });
 });
+
+describe('HeartbeatDebugScreen API usage', () => {
+  it('only calls existing APIService methods', () => {
+    const APIService = require('../../services/APIService').default;
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '../../components/HeartbeatDebugScreen.js'), 'utf8');
+    const calls = [...source.matchAll(/APIService\.(\w+)\(/g)].map((m) => m[1]);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const method of calls) expect(typeof APIService[method]).toBe('function');
+  });
+});

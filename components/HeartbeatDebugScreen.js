@@ -11,6 +11,7 @@ import {
 import HeartbeatService from '../services/HeartbeatService';
 import LocationService from '../services/LocationService';
 import TimelineDatabase from '../services/TimelineDatabase';
+import APIService from '../services/APIService';
 import { Card } from './Card';
 import Button from './Button';
 
@@ -20,6 +21,7 @@ const HeartbeatDebugScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [lastHeartbeatResult, setLastHeartbeatResult] = useState(null);
   const [dbStats, setDbStats] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const loadDbStats = async () => {
     try {
@@ -102,6 +104,49 @@ const HeartbeatDebugScreen = () => {
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
     return `${minutes}m ${seconds}s`;
+  };
+
+  const toLocalDateString = (date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  const reprocessUnassigned = async () => {
+    const todayString = toLocalDateString(new Date());
+    setIsProcessing(true);
+    try {
+      const result = await APIService.reprocessDay(todayString, 'unassigned');
+      Alert.alert('Reprocess', result.message || 'Unassigned visits reprocessed successfully.');
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const reprocessFull = () => {
+    Alert.alert(
+      'Rebuild today (destructive)',
+      'This deletes and rebuilds today\'s entire timeline from raw GPS. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Rebuild',
+          style: 'destructive',
+          onPress: async () => {
+            const todayString = toLocalDateString(new Date());
+            setIsProcessing(true);
+            try {
+              await APIService.reprocessDay(todayString, 'full');
+              Alert.alert('Rebuild', 'Today\'s timeline rebuilt successfully.');
+            } catch (error) {
+              Alert.alert('Error', error.message);
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getStatusColor = (isGood) => isGood ? '#10b981' : '#ef4444';
@@ -286,6 +331,26 @@ const HeartbeatDebugScreen = () => {
           style={styles.button}
         >
           Clear Database
+        </Button>
+      </Card>
+
+      {/* Timeline */}
+      <Card style={styles.card}>
+        <Text style={styles.cardTitle}>Timeline</Text>
+        <Button
+          onPress={reprocessUnassigned}
+          disabled={isProcessing}
+          style={styles.button}
+        >
+          Reprocess unassigned (today)
+        </Button>
+        <Button
+          onPress={reprocessFull}
+          variant="danger"
+          disabled={isProcessing}
+          style={styles.button}
+        >
+          Rebuild today (destructive)
         </Button>
       </Card>
 
