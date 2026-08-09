@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { ThemeProvider } from '../../src/theme';
 import { TimelineItemRow } from '../../src/screens/timeline/TimelineItemRow';
 
@@ -36,4 +36,47 @@ it('renders travel with distance and mode', () => {
     </ThemeProvider>
   );
   expect(getByText(/2\.0mi/)).toBeTruthy();
+});
+
+it('renders the detail chevron only when the visit is selected and onDetailPress is provided', () => {
+  const { queryByRole, rerender } = render(
+    <ThemeProvider>
+      <TimelineItemRow item={visit} timezone="UTC" selected={false} purchases={purchases} onPress={() => {}} />
+    </ThemeProvider>
+  );
+  expect(queryByRole('button')).toBeNull();
+
+  rerender(
+    <ThemeProvider>
+      <TimelineItemRow item={visit} timezone="UTC" selected purchases={purchases} onPress={() => {}} />
+    </ThemeProvider>
+  );
+  expect(queryByRole('button')).toBeNull();
+
+  rerender(
+    <ThemeProvider>
+      <TimelineItemRow item={visit} timezone="UTC" selected purchases={purchases} onPress={() => {}} onDetailPress={() => {}} />
+    </ThemeProvider>
+  );
+  expect(queryByRole('button')).toBeTruthy();
+});
+
+it('routes to onDetailPress (not onPress) when tapping an already-selected visit row', () => {
+  const onPress = jest.fn();
+  const onDetailPress = jest.fn();
+  const { getByText } = render(
+    <ThemeProvider>
+      <TimelineItemRow
+        item={visit}
+        timezone="UTC"
+        selected
+        purchases={purchases}
+        onPress={onPress}
+        onDetailPress={onDetailPress}
+      />
+    </ThemeProvider>
+  );
+  fireEvent.press(getByText('Blue Bottle'));
+  expect(onDetailPress).toHaveBeenCalledWith(visit);
+  expect(onPress).not.toHaveBeenCalled();
 });

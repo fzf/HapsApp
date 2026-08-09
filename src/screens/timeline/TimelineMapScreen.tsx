@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import BottomSheet from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon, Pill } from '../../ui';
@@ -11,11 +12,13 @@ import { useTimelineDay } from '../../hooks/useTimelineDay';
 import { regionForItem, regionForBounds } from './mapGeometry';
 import { MapOverlays } from './MapOverlays';
 import { TimelineSheet } from './TimelineSheet';
+import { timelineNeedsRefresh } from './refreshFlag';
 
 export function TimelineMapScreen() {
   const theme = useTheme();
   const { colors, spacing, type } = theme;
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const state = useTimelineDay();
   const mapRef = useRef<MapView>(null);
   const sheetRef = useRef<BottomSheet>(null);
@@ -110,6 +113,22 @@ export function TimelineMapScreen() {
     focusItem(item);
   }, [focusItem]);
 
+  const onDetailPress = useCallback((item: TimelineItem) => {
+    navigation.navigate('VisitDetail', { visitId: item.id });
+  }, [navigation]);
+
+  // Refresh the day's data when this screen regains focus after a visit was
+  // edited in VisitDetail (which sets timelineNeedsRefresh.current = true).
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (timelineNeedsRefresh.current) {
+        timelineNeedsRefresh.current = false;
+        state.reload();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, state.reload]);
+
   // Auto-focus current item on load (port of MapTimelineScreen.js:335-388)
   useEffect(() => {
     if (state.loading || !state.day) return;
@@ -200,7 +219,13 @@ export function TimelineMapScreen() {
         backgroundStyle={{ backgroundColor: colors.surface }}
         handleIndicatorStyle={{ backgroundColor: colors.borderStrong }}
       >
-        <TimelineSheet state={state} selectedId={selectedId} onSelect={selectItem} listRef={listRef} />
+        <TimelineSheet
+          state={state}
+          selectedId={selectedId}
+          onSelect={selectItem}
+          onDetailPress={onDetailPress}
+          listRef={listRef}
+        />
       </BottomSheet>
     </View>
   );

@@ -8,9 +8,10 @@ import { TimelineItemRow } from './TimelineItemRow';
 import { fmtDistance, fmtAmount } from './format';
 import type { TimelineDayState } from '../../hooks/useTimelineDay';
 
-export function TimelineSheet({ state, selectedId, onSelect, listRef }: {
+export function TimelineSheet({ state, selectedId, onSelect, onDetailPress, listRef }: {
   state: TimelineDayState; selectedId: string | null;
-  onSelect: (item: TimelineItem) => void; listRef: React.RefObject<any>;
+  onSelect: (item: TimelineItem) => void; onDetailPress?: (item: TimelineItem) => void;
+  listRef: React.RefObject<any>;
 }) {
   const { colors, spacing, type } = useTheme();
   const { items, purchases, timezone, loading } = state;
@@ -39,6 +40,7 @@ export function TimelineSheet({ state, selectedId, onSelect, listRef }: {
           selected={selectedId === `${item.type}-${item.id}`}
           purchases={purchases}
           onPress={onSelect}
+          onDetailPress={onDetailPress}
           isLast={index === items.length - 1}
         />
       )}

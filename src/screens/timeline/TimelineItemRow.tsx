@@ -18,18 +18,28 @@ function travelModeOf(item: TimelineItem): string {
   return speedMode(mid);
 }
 
-export function TimelineItemRow({ item, timezone, selected, purchases, onPress, isLast }: {
+export function TimelineItemRow({ item, timezone, selected, purchases, onPress, onDetailPress, isLast }: {
   item: TimelineItem; timezone: string; selected: boolean;
-  purchases: Purchase[]; onPress: (item: TimelineItem) => void; isLast?: boolean;
+  purchases: Purchase[]; onPress: (item: TimelineItem) => void;
+  onDetailPress?: (item: TimelineItem) => void; isLast?: boolean;
 }) {
   const { colors, spacing, type, radii } = useTheme();
   const isVisit = item.type === 'visit';
   const visitPurchases = isVisit ? purchases.filter((p) => p.matched_visit?.visit_id === item.id) : [];
   const mode = travelModeOf(item);
   const timeRange = `${fmtTime(item.start_time, timezone)}${item.end_time ? ` – ${fmtTime(item.end_time, timezone)}` : ' – now'}`;
+  const showDetailAccessory = isVisit && selected && !!onDetailPress;
+
+  const handleRowPress = () => {
+    if (showDetailAccessory) {
+      onDetailPress!(item);
+    } else {
+      onPress(item);
+    }
+  };
 
   return (
-    <Pressable onPress={() => onPress(item)} style={{ flexDirection: 'row', paddingHorizontal: spacing.lg }}>
+    <Pressable onPress={handleRowPress} style={{ flexDirection: 'row', paddingHorizontal: spacing.lg }}>
       {/* spine */}
       <View style={{ width: 28, alignItems: 'center' }}>
         <View style={{
@@ -85,6 +95,16 @@ export function TimelineItemRow({ item, timezone, selected, purchases, onPress, 
           </View>
         )}
       </View>
+      {showDetailAccessory ? (
+        <Pressable
+          onPress={() => onDetailPress!(item)}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={{ justifyContent: 'center', paddingLeft: spacing.sm }}
+        >
+          <Icon name="chevron-right" size={20} color={colors.textTertiary} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
