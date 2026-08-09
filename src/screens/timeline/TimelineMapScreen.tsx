@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import BottomSheet from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
@@ -16,7 +16,6 @@ export function TimelineMapScreen() {
   const theme = useTheme();
   const { colors, spacing, type } = theme;
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
   const state = useTimelineDay();
   const mapRef = useRef<MapView>(null);
   const sheetRef = useRef<BottomSheet>(null);
@@ -64,7 +63,7 @@ export function TimelineMapScreen() {
   const lastAutoFocusKey = useRef<string | null>(null);
   useEffect(() => {
     if (state.loading || !state.day) return;
-    const key = `${state.date.toDateString()}-${state.items.length}`;
+    const key = `${state.date.toDateString()}-${state.items.length}-${mapReady}`;
     if (lastAutoFocusKey.current === key) return;
     lastAutoFocusKey.current = key;
     if (state.currentItem) {
@@ -136,9 +135,11 @@ export function TimelineMapScreen() {
           flexDirection: 'row', alignItems: 'center',
         }}>
           <Text style={[type.caption, { flex: 1, color: colors.danger }]}>{state.error}</Text>
-          <Text onPress={state.reload} style={[type.caption, { color: colors.danger, fontWeight: '700', marginLeft: spacing.md }]}>
-            Retry
-          </Text>
+          <Pressable onPress={state.reload} accessibilityRole="button">
+            <Text style={[type.caption, { color: colors.danger, fontWeight: '700', marginLeft: spacing.md }]}>
+              Retry
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
