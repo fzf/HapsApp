@@ -34,6 +34,26 @@ git checkout -b redesign/phase-1-cleanup
 Run: `npm test`
 Expected: current suites pass (record any pre-existing failures verbatim in the task report; do not fix them silently). Note: `App.test.js` in the repo root is NOT a jest test — it is an abandoned app entry deleted in Task 1. If jest picks it up and errors, that confirms Task 1's motivation; note it and continue.
 
+**Baseline finding (2026-08-08):** the baseline is RED — 25/30 tests failing across all 4 suites before any change. Task 0.5 repairs this; until it lands, "npm test passes" in later tasks means "the suites Task 0.5 made green stay green."
+
+---
+
+### Task 0.5: Repair or quarantine the stale test suites
+
+The suites predate the current service implementations: `__tests__/services/APIService.test.js` mocks `fetch`/network in ways the current `APIService` no longer matches; `tests/HeartbeatService.test.js` likewise; `__tests__/hooks/useAuthRequest.test.js` fails in `renderHook`/`act` under React 19 + RN 0.79. (`App.test.js` is not a test and dies in Task 1.)
+
+**Files:**
+- Modify: `__tests__/services/APIService.test.js`, `tests/HeartbeatService.test.js`, `__tests__/hooks/useAuthRequest.test.js` (repair to test CURRENT behavior)
+- Modify (only if needed): `jest-setup.js`, `package.json` jest config
+
+**Interfaces:** Tasks 4 and 5 append regression tests to the APIService and HeartbeatService suites — those files must run green after this task.
+
+- [ ] **Step 1: Diagnose each suite** — run each file individually (`npx jest <file>`) and classify every failure: (a) stale mock vs. current implementation, (b) React 19 incompatibility, (c) genuinely broken product code.
+- [ ] **Step 2: Repair** — rewrite stale mocks/assertions against current service behavior. Keep test intent; drop tests whose subject no longer exists. For (c) cases: do NOT fix product code in this task — report them.
+- [ ] **Step 3: Delete only irreparable tests** — a test may be deleted only when the behavior it tested is gone or the test never asserted real behavior; list every deletion in the task report with the reason.
+- [ ] **Step 4: Verify** — `npm test` → all suites pass (App.test.js failures excepted until Task 1 removes it; if it blocks the run, add `App.test.js` to jest `testPathIgnorePatterns` and note that Task 1 deletes the file).
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "test: repair stale suites against current service implementations"`
+
 ---
 
 ### Task 1: Delete abandoned entries, build artifact, and unused data layer
