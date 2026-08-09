@@ -6,10 +6,24 @@ export interface TrackPoint {
   recorded_at?: string;      // ISO8601
 }
 
+export interface SuggestedLocation {
+  id: number;
+  name: string | null;
+  address: string | null;
+  city?: string | null;
+  state?: string | null;
+  latitude: number;
+  longitude: number;
+  rank: number;
+  providers: string[];
+}
+
 export interface TimelineLocation {
   id: number;
   name: string | null;
   address: string | null;
+  city?: string | null;
+  state?: string | null;
   latitude: number;
   longitude: number;
 }
@@ -24,8 +38,10 @@ export interface TimelineVisit {
   center_longitude: number | null;
   radius?: number | null;         // meters
   location: TimelineLocation | null;
-  suggested_locations?: TimelineLocation[];
+  suggested_locations?: SuggestedLocation[];
   gps_gap?: boolean;
+  location_source?: string;
+  location_confidence_score?: number;
 }
 
 export interface TimelineTravel {
@@ -76,4 +92,16 @@ export interface LocationPoint {
   accuracy?: number | null;
   speed?: number | null;
   timeline_id: number | null;
+}
+
+export interface GeocodeResponse {
+  message: string;
+  visit: TimelineVisit;
+}
+
+export interface ReprocessResponse {
+  message: string;
+  processed_count: number;
+  visits_count: number | null;
+  travels_count: number | null;
 }

@@ -322,6 +322,29 @@ class APIService {
   async getTransactionsForDate(dateString) {
     return this.get(`/api/transactions?date=${dateString}`);
   }
+
+  // Phase 3 visit editing methods
+  async getVisit(visitId) {
+    return this.get(`/api/timeline/visits/${visitId}`);
+  }
+
+  async updateVisitLocation(visitId, locationId) {
+    return this.patch(`/api/timeline/visits/${visitId}/location`, {
+      location_id: locationId,
+    });
+  }
+
+  async geocodeVisit(visitId, { force = false } = {}) {
+    const endpoint = `/api/timeline/visits/${visitId}/${force ? 'force_geocode' : 'geocode'}`;
+    return this.post(endpoint);
+  }
+
+  async reprocessDay(dateString, mode = 'unassigned') {
+    return this.post('/api/timeline/reprocess_day', {
+      date: dateString,
+      mode,
+    });
+  }
 }
 
 /**

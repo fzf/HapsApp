@@ -294,3 +294,12 @@ describe('TransactionsScreen API usage', () => {
     }
   });
 });
+
+describe('Phase 3 visit editing methods', () => {
+  it('exposes the visit editing API surface', () => {
+    const APIService = require('../../services/APIService').default;
+    for (const m of ['getVisit', 'updateVisitLocation', 'geocodeVisit', 'reprocessDay']) {
+      expect(typeof APIService[m]).toBe('function');
+    }
+  });
+});
