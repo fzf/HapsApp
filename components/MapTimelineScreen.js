@@ -249,27 +249,6 @@ export default function MapTimelineScreen() {
     })();
   }, []);
 
-  // Track what date was "today" when the screen last loaded
-  const lastLoadedDate = useRef(toLocalDateString(new Date()));
-
-  // Refresh when app comes back to foreground
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        const todayStr = toLocalDateString(new Date());
-        // If the user was viewing today and the date has rolled over midnight, snap to new today
-        if (lastLoadedDate.current !== todayStr) {
-          setSelectedDate(new Date()); // triggers the load useEffect below
-        } else {
-          // Same day — just reload to pick up new timeline data
-          load(selectedDate);
-        }
-        lastLoadedDate.current = todayStr;
-      }
-    });
-    return () => sub.remove();
-  }, [load, selectedDate]);
-
   // Returns the item (visit or travel) that is currently active or most recently ended.
   // Only applies when viewing today.
   const getCurrentItem = useCallback((data, isToday) => {
@@ -394,6 +373,27 @@ export default function MapTimelineScreen() {
   }, [token, mapReady, getCurrentItem]);
 
   useEffect(() => { load(selectedDate); }, [selectedDate, token]);
+
+  // Track what date was "today" when the screen last loaded
+  const lastLoadedDate = useRef(toLocalDateString(new Date()));
+
+  // Refresh when app comes back to foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        const todayStr = toLocalDateString(new Date());
+        // If the user was viewing today and the date has rolled over midnight, snap to new today
+        if (lastLoadedDate.current !== todayStr) {
+          setSelectedDate(new Date()); // triggers the load useEffect below
+        } else {
+          // Same day — just reload to pick up new timeline data
+          load(selectedDate);
+        }
+        lastLoadedDate.current = todayStr;
+      }
+    });
+    return () => sub.remove();
+  }, [load, selectedDate]);
 
   // If map becomes ready after data is already loaded, pan to current item
   useEffect(() => {
