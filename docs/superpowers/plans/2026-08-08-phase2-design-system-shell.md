@@ -1450,7 +1450,10 @@ export function TimelineMapScreen() {
   const lastAutoFocusKey = useRef<string | null>(null);
   useEffect(() => {
     if (state.loading || !state.day) return;
-    const key = `${state.date.toDateString()}-${state.items.length}`;
+    // mapReady is part of the key so the effect re-runs (and animates) when the
+    // map becomes ready after data already loaded — port of the legacy screen's
+    // dedicated late-mapReady effect (found in Task 8 review, fix round 1)
+    const key = `${state.date.toDateString()}-${state.items.length}-${mapReady}`;
     if (lastAutoFocusKey.current === key) return;
     lastAutoFocusKey.current = key;
     if (state.currentItem) {
