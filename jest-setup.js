@@ -119,13 +119,35 @@ jest.mock('expo-network', () => ({
   })),
 }));
 
-// Mock react-native Platform
-jest.mock('react-native', () => ({
-  Platform: {
-    OS: 'ios',
-    select: jest.fn((options) => options.ios),
-  },
+// Mock expo-font to prevent native module loading in tests
+jest.mock('expo-font', () => ({
+  loadAsync: jest.fn(() => Promise.resolve()),
+  isLoaded: jest.fn(() => true),
+  isLoading: jest.fn(() => false),
 }));
+
+// Mock @expo/vector-icons
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  // Create a mock icon component
+  const MockIcon = (props) => React.createElement(View, { testID: `icon-${props.name}` });
+
+  // Add glyphMap to satisfy TypeScript's IconName type
+  MockIcon.glyphMap = {};
+
+  return {
+    MaterialCommunityIcons: MockIcon,
+  };
+});
+
+// Mock useColorScheme to return 'light' by default
+// This avoids issues with detecting system color scheme in tests
+const RNModule = require('react-native');
+if (RNModule && typeof RNModule === 'object') {
+  RNModule.useColorScheme = jest.fn(() => 'light');
+}
 
 // Mock React Navigation
 jest.mock('@react-navigation/native', () => ({
