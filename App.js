@@ -1,12 +1,16 @@
 import React from 'react';
+import * as Sentry from '@sentry/react-native';
 // Import task definitions early to ensure background tasks are defined
 import './taskDefinitions';
+import { initSentry } from './config/sentry';
 import { AuthProvider } from './AuthContext';
 import { AppStateProvider } from './contexts';
 import { ErrorBoundary } from './components';
 import { RootNavigator } from './navigation';
 
-export default function App() {
+initSentry();
+
+function App() {
   return (
     <ErrorBoundary
       name="App Root"
@@ -21,3 +25,5 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
+export default Sentry.wrap(App);
