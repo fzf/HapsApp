@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import APIService from '../../services/APIService';
 import { TimelineLocation, TimelineVisit } from '../api/types';
 import { timelineNeedsRefresh } from '../screens/timeline/refreshFlag';
@@ -21,6 +21,15 @@ export function useVisitDetail(visitId: number): {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Live mirror of `busy`, read synchronously by selectLocation/refreshGeocode to
+  // guard against overlapping mutations. State alone isn't enough: the closures
+  // captured at call time would see the `busy` value from their own render, which
+  // is stale for a second call fired before that render's setBusy(true) commits.
+  const busyRef = useRef(false);
+  const setBusyGuarded = useCallback((value: boolean) => {
+    busyRef.current = value;
+    setBusy(value);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,7 +51,7 @@ export function useVisitDetail(visitId: number): {
   const clearError = useCallback(() => setError(null), []);
 
   const selectLocation = useCallback(async (locationId: number) => {
-    if (!visit) return;
+    if (!visit || busyRef.current) return;
     const previous = visit;
     const suggestion = (visit.suggested_locations || []).find((s) => s.id === locationId);
     const optimisticLocation: TimelineLocation = suggestion
@@ -63,7 +72,7 @@ export function useVisitDetail(visitId: number): {
       location_source: 'manual',
       location_confidence_score: 1.0,
     });
-    setBusy(true);
+    setBusyGuarded(true);
     setError(null);
     try {
       const updated = await APIService.updateVisitLocation(visitId, locationId);
@@ -73,12 +82,13 @@ export function useVisitDetail(visitId: number): {
       setVisit(previous);
       setError(errorMessage(err));
     } finally {
-      setBusy(false);
+      setBusyGuarded(false);
     }
-  }, [visit, visitId]);
+  }, [visit, visitId, setBusyGuarded]);
 
   const refreshGeocode = useCallback(async (force = false) => {
-    setBusy(true);
+    if (busyRef.current) return;
+    setBusyGuarded(true);
     setError(null);
     try {
       const response = await APIService.geocodeVisit(visitId, { force });
@@ -87,9 +97,9 @@ export function useVisitDetail(visitId: number): {
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setBusy(false);
+      setBusyGuarded(false);
     }
-  }, [visitId]);
+  }, [visitId, setBusyGuarded]);
 
   return { visit, loading, busy, error, clearError, selectLocation, refreshGeocode };
 }

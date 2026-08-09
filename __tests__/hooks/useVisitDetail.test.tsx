@@ -133,6 +133,35 @@ it('(e) 429-shaped rejection surfaces rate-limit message', async () => {
   expect(timelineNeedsRefresh.current).toBe(false);
 });
 
+it('selectLocation is a no-op while a mutation is already in flight', async () => {
+  (APIService.getVisit as jest.Mock).mockResolvedValue(baseVisit());
+  let resolveUpdate: (v: any) => void = () => {};
+  (APIService.updateVisitLocation as jest.Mock).mockReturnValue(
+    new Promise((resolve) => { resolveUpdate = resolve; })
+  );
+
+  const { result } = renderHook(() => useVisitDetail(1));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  act(() => {
+    result.current.selectLocation(10);
+  });
+  await waitFor(() => expect(result.current.busy).toBe(true));
+
+  // second call while the first is still in flight should be a no-op
+  act(() => {
+    result.current.selectLocation(10);
+  });
+
+  await act(async () => {
+    resolveUpdate(baseVisit({ location: { id: 10, name: 'Cafe', address: '1 Main St', latitude: 1, longitude: 1 } }));
+    await Promise.resolve();
+  });
+
+  await waitFor(() => expect(result.current.busy).toBe(false));
+  expect(APIService.updateVisitLocation).toHaveBeenCalledTimes(1);
+});
+
 it('clearError resets error state', async () => {
   (APIService.getVisit as jest.Mock).mockResolvedValue(baseVisit());
   (APIService.geocodeVisit as jest.Mock).mockRejectedValue(new Error('boom'));
