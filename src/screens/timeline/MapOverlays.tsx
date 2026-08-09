@@ -66,7 +66,7 @@ export function MapOverlays({ day, selectedId, locationPoints, purchases, onSele
                 width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
                 backgroundColor: isSelected ? colors.visitPinSelected : colors.visitPin,
               }}>
-                <Icon name="map-marker" size={16} color="#FFFFFF" />
+                <Icon name="map-marker" size={16} color={colors.onPrimary} />
               </View>
             </Marker>
             {/* Purchase markers at visit location */}
