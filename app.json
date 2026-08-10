@@ -28,7 +28,9 @@
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
           "background-location-task",
-          "background-sync-task"
+          "background-sync-task",
+          "background-heartbeat-task",
+          "com.expo.modules.backgroundtask.processing"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
