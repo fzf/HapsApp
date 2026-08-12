@@ -117,6 +117,7 @@ jest.mock('expo-network', () => ({
     isConnected: true,
     isInternetReachable: true,
   })),
+  addNetworkStateListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
 // Mock expo-font to prevent native module loading in tests

@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import * as Network from 'expo-network';
 import { LocationService, HeartbeatService } from '../services';
 import LoggingService from '../services/LoggingService';
+import { useAuth } from '../AuthContext';
 
 const AppStateContext = createContext();
 
@@ -55,6 +56,7 @@ const initialState = {
  */
 export const AppStateProvider = ({ children }) => {
   const [state, dispatch] = useReducer(appStateReducer, initialState);
+  const { user } = useAuth();
 
   // Handle app state changes
   useEffect(() => {
@@ -206,6 +208,31 @@ export const AppStateProvider = ({ children }) => {
 
     initializeAppState();
   }, []);
+
+  // Auto-start background location tracking whenever a signed-in user is
+  // present. The legacy HomeScreen (mounted on every launch) used to own
+  // this; the redesigned shell has no such screen, so the provider does it.
+  // startTracking() is idempotent and also re-arms auto-sync and the
+  // heartbeat service, whose in-memory state is lost on cold start even
+  // when the OS still has the location task registered.
+  useEffect(() => {
+    if (!user) return;
+
+    const autoStartTracking = async () => {
+      try {
+        const started = await LocationService.startTracking();
+        if (started) {
+          await checkLocationTracking();
+        } else {
+          LoggingService.error('Auto-start of location tracking was refused (permissions?)');
+        }
+      } catch (error) {
+        LoggingService.error('Failed to auto-start location tracking', error);
+      }
+    };
+
+    autoStartTracking();
+  }, [user]);
 
   // Register a global callback so LocationSyncService can update sync status
   // without importing the context (avoids circular deps)
