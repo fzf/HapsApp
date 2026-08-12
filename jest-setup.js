@@ -1,6 +1,11 @@
 // Note: @testing-library/jest-native is deprecated in favor of built-in matchers
 // Using built-in Jest matchers from @testing-library/react-native v12.4+
 
+// APIService reads its base URL from process.env.EXPO_PUBLIC_API_URL at
+// construction time (it's a singleton instantiated on import), so this must
+// be set before any test file imports services/APIService.js.
+process.env.EXPO_PUBLIC_API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -15,6 +20,7 @@ jest.mock('expo-secure-store', () => ({
 
 // Mock Location
 jest.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
   requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
   requestBackgroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(() => Promise.resolve({
@@ -22,8 +28,12 @@ jest.mock('expo-location', () => ({
       latitude: 37.7749,
       longitude: -122.4194,
       accuracy: 10
-    }
+    },
+    timestamp: Date.now(),
   })),
+  // Current HeartbeatService falls back to this when getCurrentPositionAsync
+  // fails; default to "nothing available" so callers must opt in per-test.
+  getLastKnownPositionAsync: jest.fn(() => Promise.reject(new Error('no last known position'))),
   watchPositionAsync: jest.fn(),
   startLocationUpdatesAsync: jest.fn(),
   stopLocationUpdatesAsync: jest.fn(),
@@ -75,8 +85,17 @@ jest.mock('expo-sqlite', () => ({
 }));
 
 // Mock expo-background-task
+// registerTaskAsync/unregisterTaskAsync/BackgroundTaskResult are what current
+// product code (HeartbeatService, LocationService, taskDefinitions) actually
+// calls; startBackgroundTaskAsync is kept for compatibility but is unused.
 jest.mock('expo-background-task', () => ({
   startBackgroundTaskAsync: jest.fn(() => Promise.resolve(() => {})),
+  registerTaskAsync: jest.fn(() => Promise.resolve()),
+  unregisterTaskAsync: jest.fn(() => Promise.resolve()),
+  BackgroundTaskResult: {
+    Success: 1,
+    Failed: 2,
+  },
 }));
 
 // Mock react-native-background-fetch
@@ -100,13 +119,35 @@ jest.mock('expo-network', () => ({
   })),
 }));
 
-// Mock react-native Platform
-jest.mock('react-native', () => ({
-  Platform: {
-    OS: 'ios',
-    select: jest.fn((options) => options.ios),
-  },
+// Mock expo-font to prevent native module loading in tests
+jest.mock('expo-font', () => ({
+  loadAsync: jest.fn(() => Promise.resolve()),
+  isLoaded: jest.fn(() => true),
+  isLoading: jest.fn(() => false),
 }));
+
+// Mock @expo/vector-icons
+jest.mock('@expo/vector-icons', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  // Create a mock icon component
+  const MockIcon = (props) => React.createElement(View, { testID: `icon-${props.name}` });
+
+  // Add glyphMap to satisfy TypeScript's IconName type
+  MockIcon.glyphMap = {};
+
+  return {
+    MaterialCommunityIcons: MockIcon,
+  };
+});
+
+// Mock useColorScheme to return 'light' by default
+// This avoids issues with detecting system color scheme in tests
+const RNModule = require('react-native');
+if (RNModule && typeof RNModule === 'object') {
+  RNModule.useColorScheme = jest.fn(() => 'light');
+}
 
 // Mock React Navigation
 jest.mock('@react-navigation/native', () => ({
@@ -124,9 +165,13 @@ jest.mock('@react-navigation/native', () => ({
 // Global test setup
 global.fetch = jest.fn();
 
-// Silence console warnings in tests
+// Silence console noise in tests. Product services (LoggingService,
+// HeartbeatService, LocationCacheService, etc.) log heavily via
+// console.log/warn/error; without this, passing test output is dominated
+// by that noise instead of test results.
 global.console = {
   ...console,
+  log: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
 };

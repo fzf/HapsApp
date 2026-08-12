@@ -1,8 +1,9 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { useColorScheme } from 'react-native';
 import { useAuth } from '../AuthContext';
 import { Screen, LoadingSpinner } from '../components';
-import AppNavigator from './AppNavigator';
+import AppTabs from '../src/navigation/AppTabs';
 import AuthNavigator from './AuthNavigator';
 
 /**
@@ -10,6 +11,7 @@ import AuthNavigator from './AuthNavigator';
  */
 const RootNavigator = () => {
   const { isAuthenticated, loading } = useAuth();
+  const scheme = useColorScheme();
 
   if (loading) {
     return (
@@ -23,8 +25,8 @@ const RootNavigator = () => {
   }
 
   return (
-    <NavigationContainer>
-      {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
+    <NavigationContainer theme={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+      {isAuthenticated ? <AppTabs /> : <AuthNavigator />}
     </NavigationContainer>
   );
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthRequest } from './useAuthRequest';
-import { LocationService, VisitTrackingService, LocationSyncService } from '../services';
+import { LocationService, LocationSyncService } from '../services';
 
 /**
  * Hook for managing location tracking state and operations
@@ -114,85 +114,6 @@ export const useLocationTracking = () => {
     syncLocations,
     requestLocationPermission,
     checkLocationPermission,
-    clearError,
-  };
-};
-
-/**
- * Hook for managing visit tracking
- */
-export const useVisitTracking = () => {
-  const [activeVisit, setActiveVisit] = useState(null);
-  const [recentVisits, setRecentVisits] = useState([]);
-  const { execute, loading, error, clearError } = useAuthRequest();
-
-  // Get active visit
-  const getActiveVisit = useCallback(async () => {
-    try {
-      const visit = await VisitTrackingService.getCurrentVisit();
-      setActiveVisit(visit);
-      return visit;
-    } catch (err) {
-      console.error('Error getting active visit:', err);
-      throw err;
-    }
-  }, []);
-
-  // Get recent visits
-  const getRecentVisits = useCallback(async (limit = 10) => {
-    try {
-      const visits = await VisitTrackingService.getRecentVisits(limit);
-      setRecentVisits(visits);
-      return visits;
-    } catch (err) {
-      console.error('Error getting recent visits:', err);
-      throw err;
-    }
-  }, []);
-
-  // Start a new visit
-  const startVisit = useCallback(async (location) => {
-    return execute(async () => {
-      const visit = await VisitTrackingService.startVisit(location);
-      setActiveVisit(visit);
-      return visit;
-    });
-  }, [execute]);
-
-  // End current visit
-  const endVisit = useCallback(async () => {
-    return execute(async () => {
-      const result = await VisitTrackingService.endCurrentVisit();
-      setActiveVisit(null);
-      // Refresh recent visits
-      await getRecentVisits();
-      return result;
-    });
-  }, [execute, getRecentVisits]);
-
-  // Load initial data
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        await getActiveVisit();
-        await getRecentVisits();
-      } catch (err) {
-        console.error('Error loading initial visit data:', err);
-      }
-    };
-
-    loadInitialData();
-  }, [getActiveVisit, getRecentVisits]);
-
-  return {
-    activeVisit,
-    recentVisits,
-    loading,
-    error,
-    getActiveVisit,
-    getRecentVisits,
-    startVisit,
-    endVisit,
     clearError,
   };
 };
