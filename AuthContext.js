@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import * as Sentry from '@sentry/react-native';
 import LoggingService from './services/LoggingService';
 import APIService, { APIError } from './services/APIService';
 
@@ -76,7 +77,13 @@ export const AuthProvider = ({ children }) => {
         updateCachedAuthToken(storedToken);
       }
     } catch (error) {
+      // Unlike the background token read above, this runs in the foreground on
+      // mount — a failure here means a broken session on a real launch, not an
+      // expected background SecureStore denial.
       console.error('Error checking auth state:', error);
+      Sentry.captureException(error, {
+        tags: { section: 'auth_startup', error_type: 'auth_state_check' },
+      });
     } finally {
       setLoading(false);
     }

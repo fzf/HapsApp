@@ -10,6 +10,11 @@ export function initSentry() {
     dsn,
     enabled: !__DEV__,
     tracesSampleRate: 0.2,
+    environment: process.env.EXPO_PUBLIC_BUILD_TYPE || 'unknown',
+    // Launch-time crashes are the ones we can't see from JS: a native crash or
+    // an iOS watchdog termination kills the app before any JS handler runs.
+    enableNativeCrashHandling: true,
+    enableWatchdogTerminationTracking: true,
   });
   initialized = true;
 }
