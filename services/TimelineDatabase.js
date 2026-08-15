@@ -31,7 +31,7 @@ class TimelineDatabase {
         backend_id INTEGER NOT NULL,
         date TEXT NOT NULL,
         start_time TEXT NOT NULL,
-        end_time TEXT NOT NULL,
+        end_time TEXT,
         duration INTEGER,
         center_latitude REAL,
         center_longitude REAL,
@@ -53,7 +53,7 @@ class TimelineDatabase {
         backend_id INTEGER NOT NULL,
         date TEXT NOT NULL,
         start_time TEXT NOT NULL,
-        end_time TEXT NOT NULL,
+        end_time TEXT,
         duration INTEGER,
         distance REAL,
         center_latitude REAL,
@@ -110,7 +110,7 @@ class TimelineDatabase {
         LoggingService.error('timeline.db.visit_insert_failed', err, {
           date, visit_id: visit.id, error: err?.message,
         });
-        throw err;
+        // Keep going — one bad row must not truncate the rest of the day's cache.
       }
     }
 
@@ -131,7 +131,7 @@ class TimelineDatabase {
         LoggingService.error('timeline.db.travel_insert_failed', err, {
           date, travel_id: travel.id, error: err?.message,
         });
-        throw err;
+        // Keep going — one bad row must not truncate the rest of the day's cache.
       }
     }
 
