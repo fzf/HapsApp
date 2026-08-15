@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import * as Sentry from '@sentry/react-native';
 import LoggingService from './LoggingService';
 
 class TimelineDatabase {
@@ -9,9 +10,24 @@ class TimelineDatabase {
   async init() {
     if (this.db) return this.db;
 
-    this.db = await SQLite.openDatabaseAsync('timeline.db');
-    await this.createTables();
-    return this.db;
+    try {
+      this.db = await SQLite.openDatabaseAsync('timeline.db');
+      await this.createTables();
+      Sentry.addBreadcrumb({
+        category: 'startup',
+        message: 'TimelineDatabase initialized',
+        level: 'info',
+      });
+      return this.db;
+    } catch (error) {
+      // A corrupt or unreadable db file throws on every launch, which looks
+      // like an unexplained crash loop unless we report it.
+      this.db = null;
+      Sentry.captureException(error, {
+        tags: { section: 'timeline_database', error_type: 'initialization_error' },
+      });
+      throw error;
+    }
   }
 
   async createTables() {

@@ -27,6 +27,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504",
         "EXPO_PUBLIC_BUILD_TYPE": "debug",
         "EXPO_PUBLIC_DEBUG_MODE": "true"
       },
@@ -38,6 +39,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504",
         "EXPO_PUBLIC_BUILD_TYPE": "preview"
       }
     },
@@ -45,6 +47,7 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504",
         "EXPO_PUBLIC_BUILD_TYPE": "production"
       },
       "ios": {
@@ -56,6 +59,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://haps.app",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://9c7c2e67c26186ebe88339d35c9f3a26@o4506169033621504.ingest.us.sentry.io/4507059749781504",
         "EXPO_PUBLIC_BUILD_TYPE": "production-simulator"
       },
       "ios": {
