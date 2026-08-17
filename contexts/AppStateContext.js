@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { AppState } from 'react-native';
 import * as Network from 'expo-network';
+import * as Sentry from '@sentry/react-native';
 import { LocationService, HeartbeatService } from '../services';
 import LoggingService from '../services/LoggingService';
 
@@ -39,7 +40,10 @@ const appStateReducer = (state, action) => {
 };
 
 const initialState = {
-  appState: AppState.currentState,
+  // AppState.currentState can be null briefly at startup; a null here made the
+  // change listener's .match() throw inside a native event callback, killing
+  // the app as a fatal jsi::JSError (Sentry MOBILE-38).
+  appState: AppState.currentState || 'unknown',
   networkState: { isConnected: true, isInternetReachable: true, type: 'unknown' },
   locationPermission: null,
   isTrackingLocation: false,
@@ -58,24 +62,33 @@ export const AppStateProvider = ({ children }) => {
 
   // Handle app state changes
   useEffect(() => {
+    // A synchronous throw in this callback runs inside a native event dispatch:
+    // no error boundary applies and the app dies as a fatal jsi::JSError
+    // (Sentry MOBILE-38), so the whole body is guarded.
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      LoggingService.info('App state changed', {
-        event_type: 'app_state',
-        action: 'state_change',
-        previous_state: state.appState,
-        new_state: nextAppState,
-      });
-      
-      dispatch({ type: 'SET_APP_STATE', payload: nextAppState });
-      
-      // Handle app becoming active
-      if (state.appState.match(/inactive|background/) && nextAppState === 'active') {
-        handleAppBecameActive();
-      }
-      
-      // Handle app going to background
-      if (nextAppState.match(/inactive|background/)) {
-        handleAppWentToBackground();
+      try {
+        LoggingService.info('App state changed', {
+          event_type: 'app_state',
+          action: 'state_change',
+          previous_state: state.appState,
+          new_state: nextAppState,
+        });
+
+        dispatch({ type: 'SET_APP_STATE', payload: nextAppState });
+
+        // Handle app becoming active
+        if (state.appState.match(/inactive|background/) && nextAppState === 'active') {
+          handleAppBecameActive();
+        }
+
+        // Handle app going to background
+        if (nextAppState.match(/inactive|background/)) {
+          handleAppWentToBackground();
+        }
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { section: 'app_state', error_type: 'app_state_change_error' },
+        });
       }
     });
 
