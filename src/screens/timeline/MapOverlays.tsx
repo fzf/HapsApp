@@ -6,7 +6,7 @@ import { modeColors } from '../../theme/tokens';
 import { Icon } from '../../ui';
 import { LocationPoint, Purchase, TimelineDay, TimelineItem, TimelineVisit } from '../../api/types';
 import { fmtAmount, fmtTime } from './format';
-import { buildColoredSegments } from './mapGeometry';
+import { travelCoords } from './mapGeometry';
 
 export function MapOverlays({ day, selectedId, locationPoints, purchases, onSelect }: {
   day: TimelineDay; selectedId: string | null; locationPoints: LocationPoint[];
@@ -115,63 +115,43 @@ export function MapOverlays({ day, selectedId, locationPoints, purchases, onSele
         );
       })}
 
-      {/* Travel polylines */}
+      {/* Travel polylines — server geometry is street-snapped and anchored to visits */}
       {travels.map((travel, i) => {
-        const pts = travel.track_points && travel.track_points.length > 1
-          ? travel.track_points
-          : null;
+        const coords = travelCoords(travel);
         const isSelected = selectedId === `travel-${travel.id}`;
 
-        if (pts) {
-          // Check if we have any speed data
-          const hasSpeed = pts.some((p) => p.speed != null && p.speed >= 0);
-          if (hasSpeed) {
-            // Colored segments by speed
-            const segments = buildColoredSegments(pts);
-            return segments.map((seg, si) => (
-              <Polyline
-                key={`tr-${travel.id}-seg-${si}`}
-                coordinates={seg.coords}
-                strokeColor={modeColors[seg.mode]}
-                strokeWidth={isSelected ? 5 : 3}
-                tappable
-                onPress={() => onSelect({ ...travel })}
-              />
-            ));
-          } else {
-            // Solid line, no speed data
-            return (
-              <Polyline
-                key={`tr-${travel.id}`}
-                coordinates={pts.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))}
-                strokeColor={modeColors.unknown}
-                strokeWidth={isSelected ? 5 : 3}
-                tappable
-                onPress={() => onSelect({ ...travel })}
-              />
-            );
-          }
-        } else {
-          // No track — dashed straight line between flanking visits
-          const startVisit = visits[i];
-          const endVisit = visits[i + 1];
-          if (!startVisit?.center_latitude || !startVisit?.center_longitude
-            || !endVisit?.center_latitude || !endVisit?.center_longitude) return null;
+        if (coords) {
           return (
             <Polyline
-              key={`tr-${travel.id}-straight`}
-              coordinates={[
-                { latitude: startVisit.center_latitude, longitude: startVisit.center_longitude },
-                { latitude: endVisit.center_latitude, longitude: endVisit.center_longitude },
-              ]}
-              strokeColor={colors.borderStrong}
-              strokeWidth={2}
-              lineDashPattern={[6, 4]}
+              key={`tr-${travel.id}`}
+              coordinates={coords}
+              strokeColor={modeColors[travel.mode ?? 'unknown']}
+              strokeWidth={isSelected ? 5 : 3}
               tappable
               onPress={() => onSelect({ ...travel })}
             />
           );
         }
+
+        // No geometry at all (coverage gaps) — dashed straight line between flanking visits
+        const startVisit = visits[i];
+        const endVisit = visits[i + 1];
+        if (!startVisit?.center_latitude || !startVisit?.center_longitude
+          || !endVisit?.center_latitude || !endVisit?.center_longitude) return null;
+        return (
+          <Polyline
+            key={`tr-${travel.id}-straight`}
+            coordinates={[
+              { latitude: startVisit.center_latitude, longitude: startVisit.center_longitude },
+              { latitude: endVisit.center_latitude, longitude: endVisit.center_longitude },
+            ]}
+            strokeColor={colors.borderStrong}
+            strokeWidth={2}
+            lineDashPattern={[6, 4]}
+            tappable
+            onPress={() => onSelect({ ...travel })}
+          />
+        );
       })}
     </>
   );

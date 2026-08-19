@@ -44,15 +44,23 @@ export interface TimelineVisit {
   location_confidence_score?: number;
 }
 
+export interface GeoPoint {
+  latitude: number;
+  longitude: number;
+}
+
 export interface TimelineTravel {
   id: number;
   type: 'travel';
   start_time: string;
   end_time: string | null;
   duration: number | null;
-  distance: number | null;        // meters
+  distance: number | null;        // kilometers
   center_latitude: number | null;
   center_longitude: number | null;
+  mode?: 'walking' | 'cycling' | 'driving' | 'unknown';
+  geometry_source?: 'matched' | 'raw';
+  geometry?: GeoPoint[] | null;   // street-snapped, visit-anchored polyline
   track_points?: TrackPoint[];
 }
 
