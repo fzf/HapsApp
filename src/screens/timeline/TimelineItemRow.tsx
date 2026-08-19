@@ -11,7 +11,10 @@ const modeIcon: Record<string, IconName> = {
 };
 
 function travelModeOf(item: TimelineItem): string {
-  if (item.type !== 'travel' || !item.track_points?.length) return 'unknown';
+  if (item.type !== 'travel') return 'unknown';
+  if (item.mode && item.mode !== 'unknown') return item.mode;
+  // Cached payloads predating the server-side mode field: median track speed.
+  if (!item.track_points?.length) return 'unknown';
   const speeds = item.track_points.map((p) => p.speed).filter((s): s is number => s != null && s >= 0);
   if (!speeds.length) return 'unknown';
   const mid = [...speeds].sort((a, b) => a - b)[Math.floor(speeds.length / 2)];
