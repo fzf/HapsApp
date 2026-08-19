@@ -1,5 +1,5 @@
-import { speedMode, buildColoredSegments, regionForItem } from '../../src/screens/timeline/mapGeometry';
-import { TimelineVisit } from '../../src/api/types';
+import { speedMode, travelCoords, regionForItem, regionForBounds } from '../../src/screens/timeline/mapGeometry';
+import { TimelineDay, TimelineTravel, TimelineVisit } from '../../src/api/types';
 
 it('buckets speeds into modes', () => {
   expect(speedMode(null)).toBe('unknown');
@@ -10,19 +10,54 @@ it('buckets speeds into modes', () => {
   expect(speedMode(35)).toBe('highway');
 });
 
-it('splits a track where the mode changes, overlapping one point', () => {
-  const pts = [
-    { latitude: 0, longitude: 0, speed: 1 },
-    { latitude: 0, longitude: 1, speed: 1 },
-    { latitude: 0, longitude: 2, speed: 20 },
-    { latitude: 0, longitude: 3, speed: 20 },
-  ];
-  const segs = buildColoredSegments(pts);
-  expect(segs).toHaveLength(2);
-  expect(segs[0].mode).toBe('walking');
-  expect(segs[1].mode).toBe('driving');
-  // segments share the boundary point so lines connect
-  expect(segs[0].coords[segs[0].coords.length - 1]).toEqual(segs[1].coords[0]);
+const baseTravel: TimelineTravel = {
+  id: 1, type: 'travel', start_time: '2026-08-10T12:00:00Z', end_time: '2026-08-10T12:30:00Z',
+  duration: 1800, distance: 2, center_latitude: 37.7, center_longitude: -122.4,
+};
+
+it('travelCoords prefers server geometry over track points', () => {
+  const travel: TimelineTravel = {
+    ...baseTravel,
+    geometry: [{ latitude: 1, longitude: 2 }, { latitude: 3, longitude: 4 }],
+    track_points: [
+      { latitude: 9, longitude: 9, speed: null, heading: null, recorded_at: '' },
+      { latitude: 8, longitude: 8, speed: null, heading: null, recorded_at: '' },
+    ],
+  };
+  expect(travelCoords(travel)).toEqual(travel.geometry);
+});
+
+it('travelCoords falls back to track points', () => {
+  const travel: TimelineTravel = {
+    ...baseTravel,
+    track_points: [
+      { latitude: 9, longitude: 9, speed: null, heading: null, recorded_at: '' },
+      { latitude: 8, longitude: 8, speed: null, heading: null, recorded_at: '' },
+    ],
+  };
+  expect(travelCoords(travel)).toEqual([
+    { latitude: 9, longitude: 9 },
+    { latitude: 8, longitude: 8 },
+  ]);
+});
+
+it('travelCoords returns null with fewer than 2 points', () => {
+  expect(travelCoords(baseTravel)).toBeNull();
+  expect(travelCoords({ ...baseTravel, geometry: [{ latitude: 1, longitude: 2 }] })).toBeNull();
+});
+
+it('regionForBounds includes travel geometry', () => {
+  const day: TimelineDay = {
+    visits: [],
+    travels: [{
+      ...baseTravel,
+      geometry: [{ latitude: 10, longitude: 20 }, { latitude: 12, longitude: 22 }],
+    }],
+  };
+  const region = regionForBounds(day);
+  expect(region).not.toBeNull();
+  expect(region!.latitude).toBeCloseTo(11);
+  expect(region!.longitude).toBeCloseTo(21);
 });
 
 it('regionForItem centers on a visit', () => {
