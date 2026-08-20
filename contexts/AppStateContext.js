@@ -104,15 +104,23 @@ export const AppStateProvider = ({ children }) => {
       const networkState = await Network.getNetworkStateAsync();
       dispatch({ type: 'SET_NETWORK_STATE', payload: networkState });
 
-      // Set up network state listener
+      // Set up network state listener. Same guard rationale as the AppState
+      // listener above: a sync throw here runs inside a native event dispatch
+      // and kills the app as a fatal jsi::JSError.
       subscription = Network.addNetworkStateListener((networkState) => {
-        LoggingService.info('Network state changed', {
-          event_type: 'network',
-          action: 'state_change',
-          network_state: networkState,
-        });
-        
-        dispatch({ type: 'SET_NETWORK_STATE', payload: networkState });
+        try {
+          LoggingService.info('Network state changed', {
+            event_type: 'network',
+            action: 'state_change',
+            network_state: networkState,
+          });
+
+          dispatch({ type: 'SET_NETWORK_STATE', payload: networkState });
+        } catch (error) {
+          Sentry.captureException(error, {
+            tags: { section: 'app_state', error_type: 'network_state_change_error' },
+          });
+        }
       });
     };
 
