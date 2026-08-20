@@ -87,3 +87,36 @@ describe('AppStateProvider with null AppState.currentState at startup', () => {
     expect(Sentry.captureException).toHaveBeenCalled();
   });
 });
+
+// Same fatal class, different listener: the Network state listener also runs
+// inside a native event dispatch and fires on foregrounding.
+describe('AppStateProvider network state listener', () => {
+  it('reports instead of dying when a listener dependency throws', async () => {
+    let networkHandler = null;
+
+    const Network = require('expo-network');
+    Network.addNetworkStateListener.mockImplementation((handler) => {
+      networkHandler = handler;
+      return { remove: jest.fn() };
+    });
+    const LoggingService = require('../../services/LoggingService');
+    LoggingService.info.mockImplementation(() => {
+      throw new Error('logging exploded');
+    });
+    const Sentry = require('@sentry/react-native');
+
+    const { AppStateProvider } = require('../../contexts/AppStateContext');
+    const { Text } = require('react-native');
+    const { render: doRender, act: doAct } = require('@testing-library/react-native');
+    doRender(
+      <AppStateProvider>
+        <Text>child</Text>
+      </AppStateProvider>
+    );
+
+    const { waitFor } = require('@testing-library/react-native');
+    await waitFor(() => expect(typeof networkHandler).toBe('function'));
+    expect(() => doAct(() => networkHandler({ isConnected: true, type: 'WIFI' }))).not.toThrow();
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+});

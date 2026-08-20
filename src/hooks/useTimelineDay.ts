@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 import TimelineService from '../../services/TimelineService';
 import APIService from '../../services/APIService';
 import LoggingService from '../../services/LoggingService';
@@ -71,15 +72,24 @@ export function useTimelineDay() {
   // Foreground refresh + midnight rollover (port of MapTimelineScreen.js:256-271)
   const lastLoadedDate = useRef(toLocalDateString(new Date()));
   useEffect(() => {
+    // A synchronous throw in this callback runs inside a native event
+    // dispatch: no error boundary applies and the app dies as a fatal
+    // jsi::JSError (Sentry MOBILE-38), so the whole body is guarded.
     const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') return;
-      const todayStr = toLocalDateString(new Date());
-      if (lastLoadedDate.current !== todayStr) {
-        setDate(new Date());
-      } else {
-        load(date);
+      try {
+        if (nextState !== 'active') return;
+        const todayStr = toLocalDateString(new Date());
+        if (lastLoadedDate.current !== todayStr) {
+          setDate(new Date());
+        } else {
+          load(date);
+        }
+        lastLoadedDate.current = todayStr;
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { section: 'timeline', error_type: 'foreground_refresh_error' },
+        });
       }
-      lastLoadedDate.current = todayStr;
     });
     return () => sub.remove();
   }, [load, date]);

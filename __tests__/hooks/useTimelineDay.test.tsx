@@ -53,3 +53,35 @@ it('surfaces load errors', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.error).toBe('boom');
 });
+
+// Regression for the build-103 mid-session crashes (Sentry MOBILE-38, cont.):
+// the foreground-refresh AppState listener runs inside a native event
+// dispatch — a synchronous throw there bypasses error boundaries and kills
+// the app as a fatal jsi::JSError. Crashes coincided exactly with
+// background→foreground transitions, before any listener logged.
+it('survives a throw inside the foreground-refresh AppState listener', async () => {
+  const { AppState } = require('react-native');
+  const Sentry = require('@sentry/react-native');
+  const format = require('../../src/screens/timeline/format');
+
+  let changeHandler: ((state: string) => void) | null = null;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((type: string, handler: any) => {
+    if (type === 'change') changeHandler = handler;
+    return { remove: jest.fn() };
+  });
+
+  (TimelineService.getTimelineForDate as jest.Mock).mockResolvedValue(day());
+  const { result } = renderHook(() => useTimelineDay());
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(typeof changeHandler).toBe('function');
+
+  const spy = jest.spyOn(format, 'toLocalDateString').mockImplementation(() => {
+    throw new Error('date exploded');
+  });
+  try {
+    expect(() => act(() => changeHandler!('active'))).not.toThrow();
+    expect(Sentry.captureException).toHaveBeenCalled();
+  } finally {
+    spy.mockRestore();
+  }
+});
